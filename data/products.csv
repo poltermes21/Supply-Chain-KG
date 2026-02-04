@@ -1,0 +1,11 @@
+product_id,product_name,category,unit_price
+P001,Microchip Alpha,Electronics,25.50
+P002,Steel Beam Standard,Materials,150.00
+P003,Polymer X-100,Chemicals,45.75
+P004,Circuit Board Pro,Electronics,80.00
+P005,Aluminum Sheet,Materials,35.20
+P006,Adhesive Compound,Chemicals,12.30
+P007,LED Display,Electronics,95.00
+P008,Copper Wire,Materials,8.50
+P009,Solvent B-12,Chemicals,22.00
+P010,Power Supply Unit,Electronics,120.00

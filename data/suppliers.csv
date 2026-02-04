@@ -1,0 +1,11 @@
+supplier_id,supplier_name,location,reliability_score
+S001,TechParts Inc,Shanghai,0.95
+S002,Global Materials,Mumbai,0.88
+S003,ChemSupply Co,Frankfurt,0.92
+S004,ElectroSource,Shenzhen,0.90
+S005,MetalWorks Ltd,Pittsburgh,0.85
+S006,Asian Components,Bangkok,0.87
+S007,EuroChem,Rotterdam,0.94
+S008,AmeriParts,Chicago,0.91
+S009,Pacific Materials,Sydney,0.89
+S010,Nordic Supply,Stockholm,0.93

@@ -1,0 +1,11 @@
+risk_id,risk_type,severity,probability,description
+RISK001,Geopolitical,8,0.3,Trade restrictions and tariffs
+RISK002,Natural Disaster,9,0.15,Earthquake or tsunami impact
+RISK003,Supply Shortage,7,0.4,Raw material scarcity
+RISK004,Quality Issue,6,0.25,Manufacturing defects
+RISK005,Logistics Delay,5,0.5,Port congestion and delays
+RISK006,Price Volatility,7,0.35,Commodity price fluctuations
+RISK007,Regulatory,6,0.2,Compliance changes
+RISK008,Cyber Security,8,0.25,Data breach or system attack
+RISK009,Financial,7,0.3,Supplier bankruptcy risk
+RISK010,Environmental,6,0.4,Climate change impacts

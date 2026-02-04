@@ -1,0 +1,11 @@
+route_id,origin,destination,distance,lead_time
+R001,Shanghai,Los Angeles,11000,14
+R002,Mumbai,New York,12500,16
+R003,Frankfurt,Chicago,6800,10
+R004,Shenzhen,Seattle,10500,13
+R005,Pittsburgh,Detroit,450,2
+R006,Bangkok,San Francisco,13000,18
+R007,Rotterdam,Boston,5900,9
+R008,Chicago,Dallas,1500,3
+R009,Sydney,Los Angeles,12000,17
+R010,Stockholm,New York,6500,11
