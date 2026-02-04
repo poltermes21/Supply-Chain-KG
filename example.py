@@ -39,10 +39,14 @@ def example_query_neo4j():
     
     try:
         # Connect to Neo4j
+        # Password should come from environment variable NEO4J_PASSWORD
+        import os
+        password = os.getenv('NEO4J_PASSWORD', 'your_password_here')
+        
         conn = Neo4jConnection(
             uri='bolt://localhost:7687',
             user='neo4j',
-            password='password'
+            password=password
         )
         conn.connect()
         

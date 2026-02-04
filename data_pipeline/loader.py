@@ -54,7 +54,11 @@ class DataLoader:
         
         # Strip whitespace from string columns
         for col in df.select_dtypes(include=['object']).columns:
-            df[col] = df[col].str.strip() if df[col].dtype == 'object' else df[col]
+            try:
+                df[col] = df[col].astype(str).str.strip()
+            except Exception:
+                # Skip if conversion fails
+                pass
         
         return df
     

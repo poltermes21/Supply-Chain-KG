@@ -34,11 +34,14 @@ def setup_schema(conn):
     
     for query in schema_queries:
         try:
-            # Split multi-line queries by semicolon
-            for sub_query in query.split(';'):
-                sub_query = sub_query.strip()
-                if sub_query:
-                    conn.execute_write(sub_query)
+            # Execute each constraint/index statement individually
+            # Split on newlines and filter for CREATE statements
+            statements = [line.strip() for line in query.split('\n') if line.strip().startswith('CREATE')]
+            for statement in statements:
+                if statement:
+                    # Remove semicolon if present
+                    statement = statement.rstrip(';')
+                    conn.execute_write(statement)
             print(f"✓ Schema setup completed")
         except Exception as e:
             print(f"Note: {e}")

@@ -55,10 +55,11 @@ def create_has_risk_batch_query() -> str:
     UNWIND $relationships AS rel
     CALL {
         WITH rel
-        MATCH (entity)
-        WHERE (entity:Product AND entity.product_id = rel.entity_id)
-           OR (entity:Supplier AND entity.supplier_id = rel.entity_id)
-           OR (entity:Route AND entity.route_id = rel.entity_id)
+        OPTIONAL MATCH (p:Product {product_id: rel.entity_id})
+        OPTIONAL MATCH (s:Supplier {supplier_id: rel.entity_id})
+        OPTIONAL MATCH (ro:Route {route_id: rel.entity_id})
+        WITH rel, COALESCE(p, s, ro) as entity
+        WHERE entity IS NOT NULL
         MATCH (r:Risk {risk_id: rel.risk_id})
         MERGE (entity)-[hr:HAS_RISK]->(r)
         SET hr.impact_level = rel.impact_level

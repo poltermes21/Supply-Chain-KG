@@ -19,11 +19,15 @@ class Neo4jConnection:
         Args:
             uri: Neo4j database URI (default: from NEO4J_URI env var or bolt://localhost:7687)
             user: Database username (default: from NEO4J_USER env var or 'neo4j')
-            password: Database password (default: from NEO4J_PASSWORD env var)
+            password: Database password (default: from NEO4J_PASSWORD env var, required)
         """
         self.uri = uri or os.getenv('NEO4J_URI', 'bolt://localhost:7687')
         self.user = user or os.getenv('NEO4J_USER', 'neo4j')
-        self.password = password or os.getenv('NEO4J_PASSWORD', 'password')
+        self.password = password or os.getenv('NEO4J_PASSWORD')
+        
+        if not self.password:
+            raise ValueError("Password is required. Set NEO4J_PASSWORD environment variable or pass password parameter.")
+        
         self.driver = None
         
     def connect(self):
