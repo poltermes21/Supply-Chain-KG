@@ -18,7 +18,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 # =============================================================================
 
 DATA_DIR = os.getenv("data_directory", "data")
-DATA_FILENAME = os.getenv("raw_data", "dynamic_supply_chain_logistics_dataset_with_country.csv")
+DATA_FILENAME = os.getenv("raw_data", "global_supply_chain_disruption_v1.csv")
 
 # =============================================================================
 # NEO4J CONFIGURATION

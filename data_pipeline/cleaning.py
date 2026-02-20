@@ -8,15 +8,17 @@ Outputs: validated dataset with flags + cleaning report.
 import pandas as pd
 import numpy as np
 import json
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 import os
-from config import ThresholdConfig
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class DataCleaner:
     """
-    Validates and cleans supply chain data.
-    Focuses on quality assurance, not transformation.
+    Validates and cleans supply chain resilience data.
+    Focuses on quality assurance and normalization.
     """
     
     def __init__(self, df: pd.DataFrame):
@@ -29,318 +31,331 @@ class DataCleaner:
         self.df = df.copy()
         self.inconsistencies = {}
         self.normalization_stats = {}
-        self.out_of_range_count = {}
+        self.cleaning_actions = []
         
-        # Calculate data-driven thresholds
-        self.config = ThresholdConfig(self.df)
-        
-    def validate_ranges(self) -> Dict[str, int]:
-        """
-        Validate that all variables are within expected ranges.
-        
-        Returns:
-            Dictionary with count of out-of-range values per column
-        """
-        print("Validating data ranges...")
-        
-        # Variables with range [0, 1]
-        range_0_1_cols = [
-            'handling_equipment_availability',
-            'order_fulfillment_status',
-            'supplier_reliability_score',
-            'cargo_condition_status',
-            'weather_condition_severity',
-            'disruption_likelihood_score',
-            'delay_probability'
-        ]
-        
-        for col in range_0_1_cols:
-            out_of_range = self.df[(self.df[col] < 0) | (self.df[col] > 1)]
-            self.out_of_range_count[col] = len(out_of_range)
-            if len(out_of_range) > 0:
-                print(f"   {col}: {len(out_of_range)} values out of [0,1] range")
-        
-        # warehouse_inventory_level: [0, 1000]
-        col = 'warehouse_inventory_level'
-        out_of_range = self.df[(self.df[col] < 0) | (self.df[col] > 1000)]
-        self.out_of_range_count[col] = len(out_of_range)
-        if len(out_of_range) > 0:
-            print(f"   {col}: {len(out_of_range)} values out of [0,1000] range")
-        
-        # route_risk_level: [0, 10]
-        col = 'route_risk_level'
-        out_of_range = self.df[(self.df[col] < 0) | (self.df[col] > 10)]
-        self.out_of_range_count[col] = len(out_of_range)
-        if len(out_of_range) > 0:
-            print(f"   {col}: {len(out_of_range)} values out of [0,10] range")
-        
-        # Positive values (time, costs, demand)
-        positive_cols = [
-            'lead_time_days',
-            'customs_clearance_time',
-            'shipping_costs',
-            'historical_demand'
-        ]
-        
-        for col in positive_cols:
-            negative = self.df[self.df[col] < 0]
-            self.out_of_range_count[col] = len(negative)
-            if len(negative) > 0:
-                print(f"   {col}: {len(negative)} negative values")
-        
-        total_issues = sum(self.out_of_range_count.values())
-        if total_issues == 0:
-            print("   All values within expected ranges")
-        
-        return self.out_of_range_count
+    # =========================================================================
+    # 1. FILL MISSING VALUES
+    # =========================================================================
     
-    def normalize_countries(self) -> Dict[str, str]:
+    def fill_disruption_events(self):
         """
-        Normalize country names to avoid duplicates.
+        Fill missing Disruption_Event values with 'No_Disruption'.
         
-        Returns:
-            Dictionary mapping original -> normalized names
+        Rationale: NaN means no disruption occurred, not missing data.
         """
-        print("\nNormalizing country names...")
+        print("Filling missing Disruption_Event...")
         
-        country_mapping = {
-            'USA': 'United States',
-            'US': 'United States',
-            'U.S.A.': 'United States',
+        missing_count = self.df['Disruption_Event'].isna().sum()
+        self.df['Disruption_Event'] = self.df['Disruption_Event'].fillna('No_Disruption')
+        
+        self.cleaning_actions.append({
+            'action': 'fill_disruption_events',
+            'records_affected': int(missing_count),
+            'fill_value': 'No_Disruption'
+        })
+        
+        print(f"   Filled {missing_count} records with 'No_Disruption'")
+        return missing_count
+    
+    # =========================================================================
+    # 2. CONVERT DATA TYPES
+    # =========================================================================
+    
+    def convert_order_date(self):
+        """
+        Convert Order_Date from string to datetime.
+        """
+        print("\nConverting Order_Date to datetime...")
+        
+        original_dtype = str(self.df['Order_Date'].dtype)
+        self.df['Order_Date'] = pd.to_datetime(self.df['Order_Date'], format='%Y-%m-%d')
+        
+        invalid_dates = self.df['Order_Date'].isna().sum()
+        
+        self.cleaning_actions.append({
+            'action': 'convert_order_date',
+            'original_dtype': original_dtype,
+            'new_dtype': 'datetime64[ns]',
+            'invalid_dates': int(invalid_dates)
+        })
+        
+        print(f"   Converted to datetime (invalid dates: {invalid_dates})")
+        return invalid_dates
+    
+    # =========================================================================
+    # 3. NORMALIZE LOCATION DATA (Separate City and Country)
+    # =========================================================================
+    
+    def normalize_locations(self):
+        """
+        Split Origin_City and Destination_City into separate city and country columns.
+        
+        Format: "City, CC" -> city="City", country_code="CC"
+        Also maps country codes to full names for the Knowledge Graph.
+        """
+        print("\nNormalizing location data...")
+        
+        country_code_map = {
+            'IN': 'India',
+            'CN': 'China',
+            'DE': 'Germany',
+            'JP': 'Japan',
+            'BR': 'Brazil',
             'UK': 'United Kingdom',
-            'U.K.': 'United Kingdom',
-            'UAE': 'United Arab Emirates',
-            'U.A.E.': 'United Arab Emirates',
+            'NL': 'Netherlands',
+            'US': 'United States',
+            'SG': 'Singapore'
         }
         
-        original_unique = self.df['supplier_country'].nunique()
+        def split_location(location_str):
+            """Split 'City, CC' into (city, country_code, country_name)."""
+            if pd.isna(location_str):
+                return None, None, None
+            parts = location_str.split(', ')
+            if len(parts) == 2:
+                city, code = parts
+                country = country_code_map.get(code, code)
+                return city, code, country
+            return location_str, None, None
         
-        # Apply normalization
-        self.df['supplier_country'] = self.df['supplier_country'].replace(country_mapping)
+        # Process Origin
+        origin_split = self.df['Origin_City'].apply(split_location)
+        self.df['Origin_City_Name'] = origin_split.apply(lambda x: x[0])
+        self.df['Origin_Country_Code'] = origin_split.apply(lambda x: x[1])
+        self.df['Origin_Country'] = origin_split.apply(lambda x: x[2])
         
-        normalized_unique = self.df['supplier_country'].nunique()
-        unified_count = original_unique - normalized_unique
+        # Process Destination
+        dest_split = self.df['Destination_City'].apply(split_location)
+        self.df['Destination_City_Name'] = dest_split.apply(lambda x: x[0])
+        self.df['Destination_Country_Code'] = dest_split.apply(lambda x: x[1])
+        self.df['Destination_Country'] = dest_split.apply(lambda x: x[2])
         
-        self.normalization_stats['countries_unified'] = unified_count
-        self.normalization_stats['original_countries'] = original_unique
-        self.normalization_stats['normalized_countries'] = normalized_unique
+        # Stats
+        unique_origins = self.df['Origin_City_Name'].nunique()
+        unique_destinations = self.df['Destination_City_Name'].nunique()
+        unique_countries = pd.concat([
+            self.df['Origin_Country'], 
+            self.df['Destination_Country']
+        ]).nunique()
         
-        if unified_count > 0:
-            print(f"   Unified {unified_count} country name(s)")
-        else:
-            print(f"   No country names needed normalization")
+        self.normalization_stats['unique_origin_cities'] = unique_origins
+        self.normalization_stats['unique_destination_cities'] = unique_destinations
+        self.normalization_stats['unique_countries'] = unique_countries
         
-        return country_mapping
+        self.cleaning_actions.append({
+            'action': 'normalize_locations',
+            'new_columns': [
+                'Origin_City_Name', 'Origin_Country_Code', 'Origin_Country',
+                'Destination_City_Name', 'Destination_Country_Code', 'Destination_Country'
+            ]
+        })
+        
+        print(f"   Created separate city/country columns")
+        print(f"   Unique origins: {unique_origins}, destinations: {unique_destinations}")
+        print(f"   Total unique countries: {unique_countries}")
     
-    def normalize_risk_classification(self):
+    # =========================================================================
+    # 4. DETECT INCONSISTENCIES
+    # =========================================================================
+    
+    def validate_lead_time_logic(self):
         """
-        Normalize risk_classification categories (capitalization, spacing).
-        """
-        print("\nNormalizing risk classifications...")
+        Validate lead time business logic.
         
-        # Map variations to standard values
-        risk_mapping = {
-            'High Risk': 'High',
-            'Moderate Risk': 'Moderate',
-            'Low Risk': 'Low',
+        Business rules:
+        - Scheduled_Lead_Time >= Base_Lead_Time (includes safety buffer)
+        - Actual_Lead_Time varies based on real conditions
+        - Delay_Days > 0 only when Late
+        
+        Note: Actual != Base + Delay is NOT an error - it reflects 
+        real-world variability (efficiency gains, minor delays absorbed, etc.)
+        """
+        print("\nValidating lead time logic...")
+        
+        # Check: Scheduled should always be >= Base
+        invalid_scheduled = self.df[
+            self.df['Scheduled_Lead_Time_Days'] < self.df['Base_Lead_Time_Days']
+        ]
+        self.inconsistencies['scheduled_less_than_base'] = len(invalid_scheduled)
+        
+        # Check: Actual should be positive
+        invalid_actual = self.df[self.df['Actual_Lead_Time_Days'] <= 0]
+        self.inconsistencies['invalid_actual_lead_time'] = len(invalid_actual)
+        
+        total = len(invalid_scheduled) + len(invalid_actual)
+        if total > 0:
+            print(f"   Found {total} lead time logic errors")
+        else:
+            print(f"   All lead time values valid")
+        
+        return total
+    
+    def detect_delay_status_inconsistencies(self):
+        """
+        Detect mismatches between Delay_Days and Delivery_Status.
+        
+        Expected:
+        - Delay_Days > 0 -> Status = 'Late'
+        - Delay_Days == 0 -> Status = 'On Time'
+        """
+        print("\nDetecting delay/status inconsistencies...")
+        
+        # Late but no delay
+        late_no_delay = self.df[
+            (self.df['Delivery_Status'] == 'Late') & 
+            (self.df['Delay_Days'] == 0)
+        ]
+        self.inconsistencies['late_but_no_delay'] = len(late_no_delay)
+        
+        # On time but with delay
+        ontime_with_delay = self.df[
+            (self.df['Delivery_Status'] == 'On Time') & 
+            (self.df['Delay_Days'] > 0)
+        ]
+        self.inconsistencies['ontime_but_delayed'] = len(ontime_with_delay)
+        
+        total = len(late_no_delay) + len(ontime_with_delay)
+        if total > 0:
+            print(f"   Found {total} delay/status mismatches:")
+            if len(late_no_delay) > 0:
+                print(f"      - 'Late' with 0 delay: {len(late_no_delay)}")
+            if len(ontime_with_delay) > 0:
+                print(f"      - 'On Time' with delay > 0: {len(ontime_with_delay)}")
+        else:
+            print(f"   All delay/status combinations consistent")
+        
+        return total
+    
+    def detect_disruption_mitigation_inconsistencies(self):
+        """
+        Detect mismatches between disruption events and mitigation actions.
+        
+        Expected:
+        - Disruption present -> Mitigation != 'Standard Shipping'
+        - No disruption -> Mitigation = 'Standard Shipping'
+        """
+        print("\nDetecting disruption/mitigation inconsistencies...")
+        
+        # Disruption but standard shipping (no mitigation taken)
+        disruption_no_action = self.df[
+            (self.df['Disruption_Event'] != 'No_Disruption') & 
+            (self.df['Mitigation_Action_Taken'] == 'Standard Shipping')
+        ]
+        self.inconsistencies['disruption_no_mitigation'] = len(disruption_no_action)
+        
+        # No disruption but special mitigation (suspicious)
+        no_disruption_special_action = self.df[
+            (self.df['Disruption_Event'] == 'No_Disruption') & 
+            (self.df['Mitigation_Action_Taken'] != 'Standard Shipping')
+        ]
+        self.inconsistencies['no_disruption_but_mitigation'] = len(no_disruption_special_action)
+        
+        total = len(disruption_no_action) + len(no_disruption_special_action)
+        if total > 0:
+            print(f"   Found {total} disruption/mitigation mismatches:")
+            if len(disruption_no_action) > 0:
+                print(f"      - Disruption with standard shipping: {len(disruption_no_action)}")
+            if len(no_disruption_special_action) > 0:
+                print(f"      - No disruption with special action: {len(no_disruption_special_action)}")
+        else:
+            print(f"   All disruption/mitigation combinations consistent")
+        
+        return total
+    
+    def detect_cost_anomalies(self):
+        """
+        Detect anomalous shipping costs using IQR method.
+        """
+        print("\nDetecting cost anomalies...")
+        
+        Q1 = self.df['Shipping_Cost_USD'].quantile(0.25)
+        Q3 = self.df['Shipping_Cost_USD'].quantile(0.75)
+        IQR = Q3 - Q1
+        
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        
+        anomalies = self.df[
+            (self.df['Shipping_Cost_USD'] < lower_bound) | 
+            (self.df['Shipping_Cost_USD'] > upper_bound)
+        ]
+        
+        self.inconsistencies['cost_anomalies'] = len(anomalies)
+        self.normalization_stats['cost_bounds'] = {
+            'lower': float(lower_bound),
+            'upper': float(upper_bound),
+            'Q1': float(Q1),
+            'Q3': float(Q3)
         }
         
-        original_unique = self.df['risk_classification'].nunique()
-        
-        # Apply normalization
-        self.df['risk_classification'] = self.df['risk_classification'].replace(risk_mapping)
-        
-        normalized_unique = self.df['risk_classification'].nunique()
-        unified_count = original_unique - normalized_unique
-        
-        self.normalization_stats['risk_categories_standardized'] = unified_count
-        
-        if unified_count > 0:
-            print(f"   Standardized {unified_count} risk category variation(s)")
+        if len(anomalies) > 0:
+            print(f"   Found {len(anomalies)} cost anomalies (IQR method)")
+            print(f"   Bounds: ${lower_bound:.2f} - ${upper_bound:.2f}")
         else:
-            print(f"   Risk categories already standardized")
+            print(f"   No cost anomalies detected")
+        
+        return len(anomalies)
     
-    def detect_risk_inconsistencies(self):
+    def detect_route_location_inconsistencies(self):
         """
-        Detect inconsistencies between risk_classification and probability metrics.
+        Detect if Route_Type matches origin-destination pairs.
+        
+        Known mappings based on data:
+        - Suez: Europe <-> Asia
+        - Atlantic: Europe <-> Americas
+        - Pacific: Asia <-> Americas
+        - Intra-Asia: Asia <-> Asia
         """
-        print("\nDetecting risk classification inconsistencies...")
+        print("\nDetecting route/location inconsistencies...")
         
-        high_prob = self.config.get('high_probability')
-        low_prob = self.config.get('low_probability')
+        # Define region mappings
+        asia_countries = ['India', 'China', 'Japan', 'Singapore']
+        europe_countries = ['Germany', 'United Kingdom', 'Netherlands']
+        americas_countries = ['United States', 'Brazil']
         
-        # Inconsistency 1: Low risk but high probabilities
-        low_risk_high_prob = self.df[
-            (self.df['risk_classification'] == 'Low') &
-            ((self.df['delay_probability'] > high_prob) | (self.df['disruption_likelihood_score'] > high_prob))
+        def get_region(country):
+            if country in asia_countries:
+                return 'Asia'
+            elif country in europe_countries:
+                return 'Europe'
+            elif country in americas_countries:
+                return 'Americas'
+            return 'Unknown'
+        
+        # Add region columns for analysis
+        self.df['Origin_Region'] = self.df['Origin_Country'].apply(get_region)
+        self.df['Destination_Region'] = self.df['Destination_Country'].apply(get_region)
+        
+        # Check route consistency
+        # Atlantic should be Europe <-> Americas
+        atlantic_wrong = self.df[
+            (self.df['Route_Type'] == 'Atlantic') &
+            ~(
+                ((self.df['Origin_Region'] == 'Europe') & (self.df['Destination_Region'] == 'Americas')) |
+                ((self.df['Origin_Region'] == 'Americas') & (self.df['Destination_Region'] == 'Europe'))
+            )
         ]
-        self.inconsistencies['low_risk_but_high_probability'] = len(low_risk_high_prob)
         
-        # Inconsistency 2: High risk but low probabilities
-        high_risk_low_prob = self.df[
-            (self.df['risk_classification'] == 'High') &
-            (self.df['delay_probability'] < low_prob) &
-            (self.df['disruption_likelihood_score'] < low_prob)
+        # Intra-Asia should be Asia <-> Asia
+        intra_asia_wrong = self.df[
+            (self.df['Route_Type'] == 'Intra-Asia') &
+            ~((self.df['Origin_Region'] == 'Asia') & (self.df['Destination_Region'] == 'Asia'))
         ]
-        self.inconsistencies['high_risk_but_low_probability'] = len(high_risk_low_prob)
         
-        total = len(low_risk_high_prob) + len(high_risk_low_prob)
+        self.inconsistencies['atlantic_route_wrong'] = len(atlantic_wrong)
+        self.inconsistencies['intra_asia_route_wrong'] = len(intra_asia_wrong)
+        
+        total = len(atlantic_wrong) + len(intra_asia_wrong)
         if total > 0:
-            print(f"   Found {total} risk classification inconsistencies (thresholds: high_prob={high_prob}, low_prob={low_prob})")
+            print(f"   Found {total} route/location mismatches")
         else:
-            print(f"   No risk classification inconsistencies")
+            print(f"   All routes consistent with locations")
+        
+        return total
     
-    def detect_delay_inconsistencies(self):
-        """
-        Detect inconsistencies between actual delays and delay probabilities.
-        """
-        print("\nDetecting delay inconsistencies...")
-        
-        high_prob = self.config.get('high_probability')
-        low_prob = self.config.get('low_probability')
-        significant_delay = self.config.get('significant_delay')
-        
-        # Inconsistency 3: No delay but high delay probability
-        no_delay_high_prob = self.df[
-            (self.df['delivery_time_deviation'] <= 0) &
-            (self.df['delay_probability'] > high_prob)
-        ]
-        self.inconsistencies['no_delay_but_high_probability'] = len(no_delay_high_prob)
-        
-        # Inconsistency 4: Significant delay but low probability
-        delay_low_prob = self.df[
-            (self.df['delivery_time_deviation'] > significant_delay) &
-            (self.df['delay_probability'] < low_prob)
-        ]
-        self.inconsistencies['significant_delay_but_low_probability'] = len(delay_low_prob)
-        
-        total = len(no_delay_high_prob) + len(delay_low_prob)
-        if total > 0:
-            print(f"   Found {total} delay probability inconsistencies (thresholds: significant_delay={significant_delay:.2f}, high_prob={high_prob}, low_prob={low_prob})")
-        else:
-            print(f"   No delay probability inconsistencies")
-    
-    def detect_inventory_inconsistencies(self):
-        """
-        Detect critical inventory situations.
-        """
-        print("\nDetecting inventory inconsistencies...")
-        
-        high_demand = self.config.get('high_demand')
-        low_demand = self.config.get('low_demand')
-        excess_inventory = self.config.get('excess_inventory')
-        critical_inventory = self.config.get('critical_inventory')
-        
-        # Inconsistency 5: Critical/zero inventory with high demand
-        zero_inv_high_demand = self.df[
-            (self.df['warehouse_inventory_level'] <= critical_inventory) &
-            (self.df['historical_demand'] > high_demand)
-        ]
-        self.inconsistencies['stockout_high_demand'] = len(zero_inv_high_demand)
-        
-        # Inconsistency 6: Excess inventory with low demand
-        excess_inv_low_demand = self.df[
-            (self.df['warehouse_inventory_level'] > excess_inventory) &
-            (self.df['historical_demand'] < low_demand)
-        ]
-        self.inconsistencies['excess_inventory_low_demand'] = len(excess_inv_low_demand)
-        
-        total = len(zero_inv_high_demand) + len(excess_inv_low_demand)
-        if total > 0:
-            print(f"   Found {total} inventory management issues (thresholds: critical_inv={critical_inventory:.2f}, excess_inv={excess_inventory:.2f}, high_demand={high_demand:.2f}, low_demand={low_demand:.2f})")
-            if len(zero_inv_high_demand) > 0:
-                print(f"      - {len(zero_inv_high_demand)} CRITICAL stockouts on high-demand products")
-        else:
-            print(f"   No inventory inconsistencies")
-    
-    def detect_customs_inconsistencies(self):
-        """
-        Detect customs time anomalies.
-        """
-        print("\nDetecting customs inconsistencies...")
-        
-        # Inconsistency: Customs time > lead time (IMPOSSIBLE)
-        customs_exceeds_leadtime = self.df[
-            self.df['customs_clearance_time'] > self.df['lead_time_days']
-        ]
-        self.inconsistencies['customs_exceeds_leadtime'] = len(customs_exceeds_leadtime)
-        
-        if len(customs_exceeds_leadtime) > 0:
-            print(f"   CRITICAL: {len(customs_exceeds_leadtime)} records with customs_time > lead_time")
-        else:
-            print(f"   No customs time errors")
-        
-        # Inconsistency: Zero customs in strict countries
-        strict_customs_countries = ['China', 'India', 'Brazil', 'Russia', 'Argentina']
-        zero_customs_strict = self.df[
-            (self.df['supplier_country'].isin(strict_customs_countries)) &
-            (self.df['customs_clearance_time'] < 0.5)
-        ]
-        self.inconsistencies['zero_customs_strict_countries'] = len(zero_customs_strict)
-        
-        if len(zero_customs_strict) > 0:
-            print(f"   {len(zero_customs_strict)} suspiciously fast customs in strict countries")
-    
-    def detect_geographic_inconsistencies(self):
-        """
-        Detect lead times inconsistent with geographic distance.
-        """
-        print("\nDetecting geographic inconsistencies...")
-        
-        nearby_max = self.config.get('nearby_max_leadtime')
-        distant_min = self.config.get('distant_min_leadtime')
-        
-        # Inconsistency: Too fast for distant countries
-        distant_countries = ['Australia', 'New Zealand', 'Argentina', 'South Africa', 'Chile']
-        too_fast_distant = self.df[
-            (self.df['supplier_country'].isin(distant_countries)) &
-            (self.df['lead_time_days'] < distant_min)
-        ]
-        self.inconsistencies['too_fast_for_distance'] = len(too_fast_distant)
-        
-        # Inconsistency: Too slow for nearby countries (assuming EU-based warehouse)
-        nearby_countries = ['France', 'Germany', 'Netherlands', 'Belgium', 'Spain', 'Italy']
-        too_slow_nearby = self.df[
-            (self.df['supplier_country'].isin(nearby_countries)) &
-            (self.df['lead_time_days'] > nearby_max)
-        ]
-        self.inconsistencies['too_slow_for_proximity'] = len(too_slow_nearby)
-        
-        total = len(too_fast_distant) + len(too_slow_nearby)
-        if total > 0:
-            print(f"   Found {total} geographic inconsistencies (thresholds: nearby_max={nearby_max:.2f} days, distant_min={distant_min:.2f} days)")
-        else:
-            print(f"   No geographic inconsistencies")
-    
-    def detect_supplier_inconsistencies(self):
-        """
-        Detect mismatches between supplier reliability and performance.
-        """
-        print("\nDetecting supplier performance inconsistencies...")
-        
-        reliable_threshold = self.config.get('reliable_supplier')
-        unreliable_threshold = self.config.get('unreliable_supplier')
-        
-        # Inconsistency: High reliability but poor fulfillment
-        reliable_poor_fulfillment = self.df[
-            (self.df['supplier_reliability_score'] > reliable_threshold) &
-            (self.df['order_fulfillment_status'] < unreliable_threshold)
-        ]
-        self.inconsistencies['reliable_supplier_poor_fulfillment'] = len(reliable_poor_fulfillment)
-        
-        # Inconsistency: Low reliability but excellent performance
-        unreliable_good_performance = self.df[
-            (self.df['supplier_reliability_score'] < unreliable_threshold) &
-            (self.df['order_fulfillment_status'] > reliable_threshold) &
-            (self.df['delivery_time_deviation'] <= 0)
-        ]
-        self.inconsistencies['unreliable_supplier_excellent_performance'] = len(unreliable_good_performance)
-        
-        total = len(reliable_poor_fulfillment) + len(unreliable_good_performance)
-        if total > 0:
-            print(f"   Found {total} supplier reliability inconsistencies (thresholds: reliable={reliable_threshold}, unreliable={unreliable_threshold})")
-        else:
-            print(f"   No supplier reliability inconsistencies")
+    # =========================================================================
+    # 5. FLAG PROBLEMATIC RECORDS
+    # =========================================================================
     
     def flag_problematic_records(self):
         """
@@ -348,33 +363,32 @@ class DataCleaner:
         """
         print("\nFlagging problematic records...")
         
-        high_prob = self.config.get('high_probability')
-        low_prob = self.config.get('low_probability')
-        high_demand = self.config.get('high_demand')
-        critical_inventory = self.config.get('critical_inventory')
-        
-        # Initialize flag columns
         self.df['has_inconsistency'] = False
         self.df['inconsistency_flags'] = ''
         
-        # Flag each type of inconsistency
+        # Lead time logic errors
+        scheduled_base_mask = self.df['Scheduled_Lead_Time_Days'] < self.df['Base_Lead_Time_Days']
+        invalid_actual_mask = self.df['Actual_Lead_Time_Days'] <= 0
+        
+        # Delay/status mismatch
+        late_no_delay_mask = (self.df['Delivery_Status'] == 'Late') & (self.df['Delay_Days'] == 0)
+        ontime_delay_mask = (self.df['Delivery_Status'] == 'On Time') & (self.df['Delay_Days'] > 0)
+        
+        # Cost anomalies
+        Q1 = self.df['Shipping_Cost_USD'].quantile(0.25)
+        Q3 = self.df['Shipping_Cost_USD'].quantile(0.75)
+        IQR = Q3 - Q1
+        cost_anomaly_mask = (
+            (self.df['Shipping_Cost_USD'] < Q1 - 1.5 * IQR) | 
+            (self.df['Shipping_Cost_USD'] > Q3 + 1.5 * IQR)
+        )
+        
         flags_map = {
-            'low_risk_high_prob': (
-                (self.df['risk_classification'] == 'Low') &
-                ((self.df['delay_probability'] > high_prob) | (self.df['disruption_likelihood_score'] > high_prob))
-            ),
-            'high_risk_low_prob': (
-                (self.df['risk_classification'] == 'High') &
-                (self.df['delay_probability'] < low_prob) &
-                (self.df['disruption_likelihood_score'] < low_prob)
-            ),
-            'customs_exceeds_leadtime': (
-                self.df['customs_clearance_time'] > self.df['lead_time_days']
-            ),
-            'stockout_high_demand': (
-                (self.df['warehouse_inventory_level'] <= critical_inventory) &
-                (self.df['historical_demand'] > high_demand)
-            ),
+            'scheduled_less_than_base': scheduled_base_mask,
+            'invalid_actual_lead_time': invalid_actual_mask,
+            'late_no_delay': late_no_delay_mask,
+            'ontime_with_delay': ontime_delay_mask,
+            'cost_anomaly': cost_anomaly_mask,
         }
         
         for flag_name, condition in flags_map.items():
@@ -383,7 +397,6 @@ class DataCleaner:
                 self.df.loc[condition, 'inconsistency_flags'] + flag_name + ';'
             )
         
-        # Clean up trailing semicolons
         self.df['inconsistency_flags'] = self.df['inconsistency_flags'].str.rstrip(';')
         
         flagged_count = self.df['has_inconsistency'].sum()
@@ -391,23 +404,28 @@ class DataCleaner:
         
         return flagged_count
     
+    # =========================================================================
+    # 6. GENERATE REPORT
+    # =========================================================================
+    
     def generate_cleaning_report(self) -> Dict:
         """
         Generate comprehensive cleaning report.
-        
-        Returns:
-            Dictionary with all cleaning statistics
         """
         report = {
             'total_records': len(self.df),
             'records_with_issues': int(self.df['has_inconsistency'].sum()),
-            'out_of_range': self.out_of_range_count,
-            'inconsistencies': self.inconsistencies,
-            'normalization': self.normalization_stats,
-            'thresholds_used': self.config.get_all()
+            'cleaning_actions': self.cleaning_actions,
+            'inconsistencies': {k: int(v) for k, v in self.inconsistencies.items()},
+            'normalization_stats': self.normalization_stats,
+            'columns_after_cleaning': list(self.df.columns)
         }
         
         return report
+    
+    # =========================================================================
+    # MAIN PIPELINE
+    # =========================================================================
     
     def clean(self) -> Tuple[pd.DataFrame, Dict]:
         """
@@ -420,30 +438,31 @@ class DataCleaner:
         print("STARTING DATA CLEANING PIPELINE")
         print("="*60)
         
-        # Print thresholds being used
-        print("\nUsing data-driven thresholds:")
-        self.config.print_summary()
+        # 1. Fill missing values
+        print("\n--- STEP 1: FILL MISSING VALUES ---")
+        self.fill_disruption_events()
         
-        # 1. Validate ranges
-        print("\n")
-        self.validate_ranges()
+        # 2. Convert data types
+        print("\n--- STEP 2: CONVERT DATA TYPES ---")
+        self.convert_order_date()
         
-        # 2. Normalize values
-        self.normalize_countries()
-        self.normalize_risk_classification()
+        # 3. Normalize locations
+        print("\n--- STEP 3: NORMALIZE LOCATIONS ---")
+        self.normalize_locations()
         
-        # 3. Detect all inconsistencies
-        self.detect_risk_inconsistencies()
-        self.detect_delay_inconsistencies()
-        self.detect_inventory_inconsistencies()
-        self.detect_customs_inconsistencies()
-        self.detect_geographic_inconsistencies()
-        self.detect_supplier_inconsistencies()
+        # 4. Detect inconsistencies
+        print("\n--- STEP 4: DETECT INCONSISTENCIES ---")
+        self.validate_lead_time_logic()
+        self.detect_delay_status_inconsistencies()
+        self.detect_disruption_mitigation_inconsistencies()
+        self.detect_cost_anomalies()
+        self.detect_route_location_inconsistencies()
         
-        # 4. Flag problematic records
+        # 5. Flag problematic records
+        print("\n--- STEP 5: FLAG PROBLEMATIC RECORDS ---")
         self.flag_problematic_records()
         
-        # 5. Generate report
+        # 6. Generate report
         report = self.generate_cleaning_report()
         
         print("\n" + "="*60)
@@ -451,22 +470,20 @@ class DataCleaner:
         print("="*60)
         print(f"Total records: {report['total_records']}")
         print(f"Records flagged: {report['records_with_issues']} ({report['records_with_issues']/report['total_records']*100:.2f}%)")
+        print(f"Total inconsistencies detected: {sum(report['inconsistencies'].values())}")
         
         return self.df, report
     
     def save_outputs(self, output_dir: str = "data"):
         """
         Save cleaned dataset and reports.
-        
-        Args:
-            output_dir: Directory to save outputs
         """
         os.makedirs(output_dir, exist_ok=True)
         
         # Save validated dataset
-        validated_path = os.path.join(output_dir, "data_validated.csv")
+        validated_path = os.path.join(output_dir, "data_cleaned.csv")
         self.df.to_csv(validated_path, index=False)
-        print(f"\nSaved validated dataset to {validated_path}")
+        print(f"\nSaved cleaned dataset to {validated_path}")
         
         # Save cleaning report
         report = self.generate_cleaning_report()
@@ -487,13 +504,19 @@ class DataCleaner:
 if __name__ == "__main__":
     from loader import DataLoader
     
-    # Load data (uses settings defaults)
+    # Load data
     loader = DataLoader()
     df = loader.load()
     
     # Clean data
     cleaner = DataCleaner(df)
-    df_validated, report = cleaner.clean()
+    df_cleaned, report = cleaner.clean()
     
     # Save outputs
     cleaner.save_outputs()
+    
+    # Print summary
+    print("\n" + "="*60)
+    print("CLEANING REPORT SUMMARY")
+    print("="*60)
+    print(json.dumps(report['inconsistencies'], indent=2))

@@ -6,8 +6,7 @@ duplicates, distributions, and outliers.
 """
 
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import warnings
 from typing import Dict
 
 
@@ -82,25 +81,54 @@ class DataExplorer:
             print(f"\n{col}: {self.df[col].nunique()} unique values")
             print(self.df[col].value_counts().head(10))
     
-    def check_ranges(self):
-        """Check min/max for float columns."""
+    def analyze_dates(self):
+        """Analyze date columns if present."""
+        date_cols = list(self.df.select_dtypes(include=['datetime64']).columns)
+        # Also check object columns that look like dates
+        for col in self.df.select_dtypes(include=['object']).columns:
+            sample = self.df[col].dropna().head(5)
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    parsed = pd.to_datetime(sample, format='%Y-%m-%d')
+                date_cols.append(col)
+            except (ValueError, TypeError):
+                pass
+
+        if len(date_cols) == 0:
+            return
+
         print("\n" + "="*60)
-        print("VALUE RANGES (float columns)")
+        print("DATE COLUMNS ANALYSIS")
         print("="*60)
-        float_columns = self.df.select_dtypes(include=['float64']).columns
-        for col in float_columns:
+        for col in date_cols:
+            dates = pd.to_datetime(self.df[col], format='%Y-%m-%d', errors='coerce')
+            valid = dates.notna().sum()
+            print(f"\n{col}:")
+            print(f"  Valid dates: {valid}/{len(self.df)}")
+            if valid > 0:
+                print(f"  Range: {dates.min()} -> {dates.max()}")
+                print(f"  Span: {(dates.max() - dates.min()).days} days")
+
+    def check_ranges(self):
+        """Check min/max for numeric columns."""
+        print("\n" + "="*60)
+        print("VALUE RANGES (numeric columns)")
+        print("="*60)
+        num_columns = self.df.select_dtypes(include=['number']).columns
+        for col in num_columns:
             min_val = self.df[col].min()
             max_val = self.df[col].max()
-            print(f"{col}: min={min_val:.4f}, max={max_val:.4f}")
+            print(f"{col}: min={min_val}, max={max_val}")
     
     def detect_outliers(self):
         """Detect outliers using z-score."""
         print("\n" + "="*60)
         print("OUTLIERS (z-score > 3)")
         print("="*60)
-        float_columns = self.df.select_dtypes(include=['float64']).columns
+        num_columns = self.df.select_dtypes(include=['number']).columns
         outlier_report = {}
-        for col in float_columns:
+        for col in num_columns:
             z_scores = (self.df[col] - self.df[col].mean()) / self.df[col].std()
             outliers = self.df[(z_scores > 3) | (z_scores < -3)]
             outlier_report[col] = len(outliers)
@@ -126,6 +154,7 @@ class DataExplorer:
         self.check_duplicates()
         self.describe_numerical()
         self.describe_categorical()
+        self.analyze_dates()
         self.check_ranges()
         self.detect_outliers()
         
@@ -138,12 +167,15 @@ class DataExplorer:
 
 # Example usage
 if __name__ == "__main__":
-    from loader import DataLoader
-    
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from data_pipeline.loader import DataLoader
+
     # Load data
     loader = DataLoader()
-    df = loader.load_csv()
-    
+    df = loader.load()
+
     # Explore data
     explorer = DataExplorer(df)
     stats = explorer.explore()
