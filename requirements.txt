@@ -1,0 +1,15 @@
+# Supply Chain Knowledge Graph - Dependencies
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Environment configuration
+python-dotenv>=1.0.0
+
+# Neo4j connection (for kg_model)
+neo4j>=5.0.0
+
+# Data visualization (optional, for analysis)
+matplotlib>=3.7.0
+seaborn>=0.12.0
