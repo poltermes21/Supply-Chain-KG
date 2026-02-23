@@ -423,7 +423,9 @@ class DataTransformer:
 
 # Example usage
 if __name__ == "__main__":
-    df_cleaned = pd.read_csv("data/data_cleaned.csv")
+    from settings import DATA_DIR
+    
+    df_cleaned = pd.read_csv(os.path.join(DATA_DIR, "data_cleaned.csv"))
     print(f"Loaded {len(df_cleaned)} rows from data_cleaned.csv")
 
     transformer = DataTransformer(df_cleaned)

@@ -1,5 +1,5 @@
 """
-KG Extractor Module - Supply Chain Resilience Knowledge Graph
+KG Extractor Module
 
 Reads the transformed dataset and extracts all nodes and relationships
 needed to build the Knowledge Graph in Neo4j.
@@ -67,8 +67,10 @@ class KGExtractor:
 
         nodes = []
         for _, row in self.df[order_cols].iterrows():
+            order_id = row['Order_ID']
             nodes.append({
-                'order_id':                  row['Order_ID'],
+                'id':                       f"Order_{order_id}",
+                'order_id':                  order_id,
                 'order_date':                str(row['Order_Date'].date()) if hasattr(row['Order_Date'], 'date') else str(row['Order_Date']),
                 'base_lead_time_days':       int(row['Base_Lead_Time_Days']),
                 'scheduled_lead_time_days':  int(row['Scheduled_Lead_Time_Days']),
@@ -116,8 +118,10 @@ class KGExtractor:
 
         nodes = []
         for _, row in self.df[risk_cols].iterrows():
+            assessment_id = row['assessment_id']
             nodes.append({
-                'assessment_id':            row['assessment_id'],
+                'id':                       f"Risk_{assessment_id}",
+                'assessment_id':            assessment_id,
                 'geopolitical_risk_index':  round(float(row['Geopolitical_Risk_Index']), 4),
                 'weather_severity_index':   round(float(row['Weather_Severity_Index']), 2),
                 'inflation_rate_pct':       round(float(row['Inflation_Rate_Pct']), 4),
@@ -145,6 +149,7 @@ class KGExtractor:
         nodes = []
         for route_type in self.df['Route_Type'].unique():
             nodes.append({
+                'id':         f"Route_{route_type}",
                 'route_id':   route_type,
                 'route_type': route_type,
             })
@@ -177,6 +182,7 @@ class KGExtractor:
         nodes = []
         for _, row in all_cities.iterrows():
             nodes.append({
+                'id':        f"City_{row['city_name']}",
                 'city_name': row['city_name'],
                 'region':    row['region'],
             })
@@ -217,6 +223,7 @@ class KGExtractor:
         nodes = []
         for _, row in all_countries.iterrows():
             nodes.append({
+                'id':           f"Country_{row['country_name']}",
                 'country_name': row['country_name'],
                 'country_code': row['country_code'],
                 'region':       row['region'],
@@ -241,6 +248,7 @@ class KGExtractor:
         nodes = []
         for category in self.df['Product_Category'].unique():
             nodes.append({
+                'id':            f"Category_{category}",
                 'category_name': category,
             })
 
@@ -263,6 +271,7 @@ class KGExtractor:
         nodes = []
         for mode in self.df['Transportation_Mode'].unique():
             nodes.append({
+                'id':        f"Mode_{mode}",
                 'mode_name': mode,
             })
 
@@ -286,6 +295,7 @@ class KGExtractor:
         nodes = []
         for disruption in self.df['Disruption_Event'].unique():
             nodes.append({
+                'id':              f"Disruption_{disruption}",
                 'disruption_name': disruption,
             })
 
@@ -313,8 +323,10 @@ class KGExtractor:
 
         nodes = []
         for _, row in grouped.iterrows():
+            action_name = row['Mitigation_Action_Taken']
             nodes.append({
-                'action_name':        row['Mitigation_Action_Taken'],
+                'id':                 f"Action_{action_name}",
+                'action_name':        action_name,
                 'avg_cost_impact':    round(float(row['avg_cost_impact']), 2),
                 'avg_delay_reduction': round(float(row['avg_delay_reduction']), 2),
             })
@@ -353,25 +365,29 @@ class KGExtractor:
             order_id = row['Order_ID']
 
             origin_from.append({
-                'from': order_id,
-                'to':   row['Origin_City_Name'],
+                'from': f"Order_{order_id}",
+                'to':   f"City_{row['Origin_City_Name']}",
             })
+
             destination_to.append({
-                'from': order_id,
-                'to':   row['Destination_City_Name'],
+                'from': f"Order_{order_id}",
+                'to':   f"City_{row['Destination_City_Name']}",
             })
+
             shipped_via.append({
-                'from': order_id,
-                'to':   row['Route_Type'],
+                'from': f"Order_{order_id}",
+                'to':   f"Route_{row['Route_Type']}",
             })
+
             transports.append({
-                'from':      order_id,
-                'to':        row['Product_Category'],
+                'from':      f"Order_{order_id}",
+                'to':        f"Category_{row['Product_Category']}",
                 'weight_kg': int(row['Order_Weight_Kg']),
             })
+
             uses_mode.append({
-                'from': order_id,
-                'to':   row['Transportation_Mode'],
+                'from': f"Order_{order_id}",
+                'to':   f"Mode_{row['Transportation_Mode']}",
             })
 
         rels = {
@@ -410,16 +426,18 @@ class KGExtractor:
             order_id = row['Order_ID']
 
             affected_by.append({
-                'from': order_id,
-                'to':   row['Disruption_Event'],
+                'from': f"Order_{order_id}",
+                'to':   f"Disruption_{row['Disruption_Event']}",
             })
+
             mitigated_with.append({
-                'from': order_id,
-                'to':   row['Mitigation_Action_Taken'],
+                'from': f"Order_{order_id}",
+                'to':   f"Action_{row['Mitigation_Action_Taken']}",
             })
+
             has_risk.append({
-                'from': order_id,
-                'to':   row['assessment_id'],
+                'from': f"Order_{order_id}",
+                'to':   f"Risk_{row['assessment_id']}",
             })
 
         rels = {
@@ -463,8 +481,8 @@ class KGExtractor:
         located_in = []
         for _, row in city_country.iterrows():
             located_in.append({
-                'from': row['city'],
-                'to':   row['country'],
+                'from': f"City_{row['city']}",
+                'to':   f"Country_{row['country']}",
             })
 
         # --- CONNECTS ---
@@ -481,8 +499,8 @@ class KGExtractor:
         connects = []
         for _, row in pd.concat([origin_connects, dest_connects]).iterrows():
             connects.append({
-                'from':      row['Route_Type'],
-                'to':        row['city'],
+                'from':      f"Route_{row['Route_Type']}",
+                'to':        f"City_{row['city']}",
                 'direction': row['direction'],
             })
 
@@ -502,8 +520,8 @@ class KGExtractor:
             severity = severity_reverse.get(round(median_severity_num), 'Moderate')
 
             vulnerable_to.append({
-                'from':      route,
-                'to':        disruption,
+                'from':      f"Route_{route}",
+                'to':        f"Disruption_{disruption}",
                 'frequency': frequency,
                 'severity':  severity,
             })
