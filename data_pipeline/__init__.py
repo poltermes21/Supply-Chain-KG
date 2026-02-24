@@ -1,6 +1,6 @@
 """
-Data Pipeline Module for Supply Chain Knowledge Graph
+Data Pipeline Package
 
-This module provides utilities for loading, cleaning, and transforming
+This package provides utilities for loading, cleaning, and transforming
 CSV data into nodes and edges suitable for Neo4j knowledge graph ingestion.
 """

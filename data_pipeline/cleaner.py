@@ -502,7 +502,7 @@ class DataCleaner:
 
 # Example usage
 if __name__ == "__main__":
-    from loader import DataLoader
+    from .loader import DataLoader
     
     # Load data
     loader = DataLoader()

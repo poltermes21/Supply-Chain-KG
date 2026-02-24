@@ -21,9 +21,9 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from settings import DATA_DIR, DATA_FILENAME
 
-from loader import DataLoader
-from cleaner import DataCleaner
-from transformer import DataTransformer
+from .loader import DataLoader
+from .cleaner import DataCleaner
+from .transformer import DataTransformer
 
 
 def run_pipeline(
