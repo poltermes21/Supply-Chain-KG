@@ -8,6 +8,7 @@ Transforms the cleaned dataset into an enriched version ready for KG entity extr
 import pandas as pd
 import numpy as np
 import os
+import re
 from typing import Dict, Tuple
 
 
@@ -24,9 +25,42 @@ class DataTransformer:
         Args:
             df: Cleaned dataframe from DataCleaner
         """
+        
         self.df = df.copy()
         self.transformation_stats = {}
-        
+
+    # =========================================================================
+    # 0. ID NORMALIZATION
+    # =========================================================================
+
+    @staticmethod
+    def normalize_disruption_id(value: str) -> str:
+        """
+        Normalize a Disruption_Event string to a short, stable snake_case id.
+        Parenthetical details are stripped to keep ids concise and query-friendly.
+
+        Examples:
+            'No_Disruption'                           -> 'no_disruption'
+            'Port Congestion'                         -> 'port_congestion'
+            'Geopolitical Conflict (Route Diversion)' -> 'geopolitical_conflict'
+            'Severe Weather (Typhoon/Storm)'          -> 'severe_weather'
+        """
+        value = re.sub(r'\(.*?\)', '', value)      # strip parenthetical details
+        value = value.lower().strip()
+        value = re.sub(r'[\s_]+', '_', value)      # spaces/underscores -> single underscore
+        value = value.strip('_')
+        return value
+
+    def create_disruption_id(self):
+        """
+        Add disruption_id column: normalized snake_case version of Disruption_Event.
+        Used as the node id for DisruptionType nodes in the KG.
+        """
+        print("Creating disruption_id normalization...")
+        self.df['disruption_id'] = self.df['Disruption_Event'].apply(self.normalize_disruption_id)
+        print(f"   Mapping: {dict(zip(self.df['Disruption_Event'].unique(), self.df['disruption_id'].unique()))}")
+
+
     # =========================================================================
     # 1. CLASSIFICATION FIELDS
     # =========================================================================
@@ -51,8 +85,8 @@ class DataTransformer:
             self.df['Delay_Days'] <= 14,
             self.df['Delay_Days'] > 14
         ]
-        choices = ['None', 'Minor', 'Moderate', 'Severe', 'Critical']
-        self.df['delay_severity'] = np.select(conditions, choices, default='Unknown')
+        choices = ['none', 'minor', 'moderate', 'severe', 'critical']
+        self.df['delay_severity'] = np.select(conditions, choices, default='unknown')
         severity_counts = self.df['delay_severity'].value_counts()
         self.transformation_stats['delay_severity_distribution'] = severity_counts.to_dict()
         print(f"   Distribution: {severity_counts.to_dict()}")
@@ -66,10 +100,10 @@ class DataTransformer:
                                  + (Weather_Severity_Index / 10) * 0.4
 
         Thresholds:
-        - Low:      combined_risk_score < 0.3
-        - Medium:   0.3 <= combined_risk_score < 0.6
-        - High:     0.6 <= combined_risk_score < 0.8
-        - Critical: combined_risk_score >= 0.8
+        - low:      combined_risk_score < 0.3
+        - medium:   0.3 <= combined_risk_score < 0.6
+        - high:     0.6 <= combined_risk_score < 0.8
+        - critical: combined_risk_score >= 0.8
         """
         print("Creating risk_level classification...")
         
@@ -86,9 +120,9 @@ class DataTransformer:
             self.df['combined_risk_score'] < 0.8,
             self.df['combined_risk_score'] >= 0.8
         ]
-        choices = ['Low', 'Medium', 'High', 'Critical']
+        choices = ['low', 'medium', 'high', 'critical']
         
-        self.df['risk_level'] = np.select(conditions, choices, default='Unknown')
+        self.df['risk_level'] = np.select(conditions, choices, default='unknown')
         
         risk_counts = self.df['risk_level'].value_counts()
         self.transformation_stats['risk_level_distribution'] = risk_counts.to_dict()
@@ -100,14 +134,14 @@ class DataTransformer:
         WITHIN each Product_Category.
 
         Thresholds per category:
-        - Budget:    <= Q1  (bottom 25%)
-        - Standard:  Q1-Q2  (25-50%)
-        - Premium:   Q2-Q3  (50-75%)
-        - Emergency: > Q3   (top 25%) - correlates with disruption response
+        - budget:    <= Q1  (bottom 25%)
+        - standard:  Q1-Q2  (25-50%)
+        - premium:   Q2-Q3  (50-75%)
+        - emergency: > Q3   (top 25%) - correlates with disruption response
         """
         print("Creating cost_category classification (per product category)...")
         
-        self.df['cost_category'] = 'Unknown'
+        self.df['cost_category'] = 'unknown'
         category_thresholds = {}
         
         for category in self.df['Product_Category'].unique():
@@ -124,16 +158,16 @@ class DataTransformer:
                 cat_costs <= q3,
                 cat_costs > q3
             ]
-            choices = ['Budget', 'Standard', 'Premium', 'Emergency']
+            choices = ['budget', 'standard', 'premium', 'emergency']
             
-            self.df.loc[mask, 'cost_category'] = np.select(conditions, choices, default='Unknown')
+            self.df.loc[mask, 'cost_category'] = np.select(conditions, choices, default='unknown')
             
             category_thresholds[category] = {
-                'Q1_Budget': float(q1),
-                'Q2_Standard': float(q2),
-                'Q3_Premium': float(q3)
+                'q1_budget':   float(q1),
+                'q2_standard': float(q2),
+                'q3_premium':  float(q3)
             }
-            print(f"   {category}: Budget<${q1:.0f}, Standard<${q2:.0f}, Premium<${q3:.0f}")
+            print(f"   {category}: budget<${q1:.0f}, standard<${q2:.0f}, premium<${q3:.0f}")
         
         self.transformation_stats['cost_thresholds_by_category'] = category_thresholds
     
@@ -152,19 +186,18 @@ class DataTransformer:
                           (Delivery_Status == 'Late')
         - is_mitigated:   True if a special mitigation action was applied
                           (Mitigation_Action_Taken != 'Standard Shipping')
-        - is_air_freight: True if transported by air, often indicating an
-                          emergency response
+        - is_air_freight: True if transported by air
         """
         print("Creating boolean flags...")
         
-        self.df['is_disrupted'] = self.df['Disruption_Event'] != 'No_Disruption'
-        self.df['is_delayed'] = self.df['Delivery_Status'] == 'Late'
-        self.df['is_mitigated'] = self.df['Mitigation_Action_Taken'] != 'Standard Shipping'
+        self.df['is_disrupted']   = self.df['Disruption_Event'] != 'No_Disruption'
+        self.df['is_delayed']     = self.df['Delivery_Status'] == 'Late'
+        self.df['is_mitigated']   = self.df['Mitigation_Action_Taken'] != 'Standard Shipping'
         self.df['is_air_freight'] = self.df['Transportation_Mode'] == 'Air'
         
         self.transformation_stats['flags'] = {
             'disrupted_orders': int(self.df['is_disrupted'].sum()),
-            'delayed_orders': int(self.df['is_delayed'].sum()),
+            'delayed_orders':   int(self.df['is_delayed'].sum()),
             'mitigated_orders': int(self.df['is_mitigated'].sum())
         }
         print(f"   Disrupted: {self.df['is_disrupted'].sum()}, Delayed: {self.df['is_delayed'].sum()}, Mitigated: {self.df['is_mitigated'].sum()}")
@@ -178,15 +211,9 @@ class DataTransformer:
         Create efficiency and performance metrics for Order nodes.
 
         Metrics created:
-        - lead_time_efficiency (%): How much faster/slower than scheduled.
-              Formula: (Scheduled - Actual) / Scheduled * 100
-              Positive = arrived early, Negative = arrived late.
-
-        - cost_per_kg (USD/kg): Normalized shipping cost by cargo weight.
-              Formula: Shipping_Cost_USD / Order_Weight_Kg
-
-        - delay_ratio (%): Delay as a percentage of the scheduled lead time.
-              Formula: Delay_Days / Scheduled_Lead_Time_Days * 100
+        - lead_time_efficiency (%): (Scheduled - Actual) / Scheduled * 100
+        - cost_per_kg (USD/kg):     Shipping_Cost_USD / Order_Weight_Kg
+        - delay_ratio (%):          Delay_Days / Scheduled_Lead_Time_Days * 100
         """
         print("Creating efficiency metrics...")
         
@@ -212,17 +239,9 @@ class DataTransformer:
         Create metrics specifically for resilience analysis.
 
         Metrics created:
-        - mitigation_effective (bool): True if the order was disrupted but still
-              delivered on time, indicating the mitigation action was successful.
-              Formula: is_disrupted AND NOT is_delayed
-
-        - cost_premium (%): Extra cost relative to the average cost of
-              non-disrupted orders, capturing the economic impact of disruptions.
-              Formula: (Shipping_Cost_USD - avg_normal_cost) / avg_normal_cost * 100
-
-        - route_segment (str): Simplified origin-destination region identifier.
-              Format: "{Origin_Region}_to_{Destination_Region}"
-              Used to aggregate flow patterns at a macro-geographic level.
+        - mitigation_effective (bool): is_disrupted AND NOT is_delayed
+        - cost_premium (%):            (cost - avg_normal_cost) / avg_normal_cost * 100
+        - route_segment (str):         "{Origin_Region}_to_{Destination_Region}"
         """
         print("Creating resilience metrics...")
         
@@ -240,8 +259,8 @@ class DataTransformer:
         )
         
         self.transformation_stats['resilience'] = {
-            'effective_mitigations': int(self.df['mitigation_effective'].sum()),
-            'unique_route_segments': int(self.df['route_segment'].nunique())
+            'effective_mitigations':  int(self.df['mitigation_effective'].sum()),
+            'unique_route_segments':  int(self.df['route_segment'].nunique())
         }
         print(f"   Effective mitigations: {self.df['mitigation_effective'].sum()}")
         print(f"   Avg cost premium disrupted orders: {self.df[self.df['is_disrupted']]['cost_premium'].mean():.2f}%")
@@ -253,6 +272,7 @@ class DataTransformer:
     def create_risk_assessment_id(self):
         """
         Generate the assessment_id for RiskAssessment nodes in the Knowledge Graph.
+        Format: "{Order_ID}_risk"
         """
         print("Creating risk_assessment_id...")
         
@@ -267,43 +287,41 @@ class DataTransformer:
         Validate that all entity identifier columns are present and ready for
         KG node extraction.
 
-        Node types and their source columns:
-        - Order:               Order_ID
-        - RiskAssessment:      assessment_id  (generated by create_risk_assessment_id)
-        - Route:               Route_Type
-        - Origin_City:         Origin_City_Name
-        - Destination_City:    Destination_City_Name
-        - Origin_Country:      Origin_Country
-        - Destination_Country: Destination_Country
-        - ProductCategory:     Product_Category
-        - TransportMode:       Transportation_Mode
-        - DisruptionType:      Disruption_Event
-        - MitigationAction:    Mitigation_Action_Taken
+        Node types and their source columns (value used directly as node id):
+        - Order:            Order_ID
+        - RiskAssessment:   assessment_id
+        - Route:            Route_Type
+        - City:             Origin_City_Name / Destination_City_Name
+        - Country:          Origin_Country / Destination_Country
+        - ProductCategory:  Product_Category
+        - TransportMode:    Transportation_Mode
+        - DisruptionType:   disruption_id  (normalized from Disruption_Event)
+        - MitigationAction: Mitigation_Action_Taken
         """
         print("Validating entity columns...")
         
         entity_columns = {
-            'Order': 'Order_ID',
-            'RiskAssessment': 'assessment_id',
-            'Route': 'Route_Type',
-            'Origin_City': 'Origin_City_Name',
-            'Destination_City': 'Destination_City_Name', 
-            'Origin_Country': 'Origin_Country',
-            'Destination_Country': 'Destination_Country',
-            'ProductCategory': 'Product_Category',
-            'TransportMode': 'Transportation_Mode',
-            'DisruptionType': 'Disruption_Event',
+            'Order':            'Order_ID',
+            'RiskAssessment':   'assessment_id',
+            'Route':            'Route_Type',
+            'Origin_City':      'Origin_City_Name',
+            'Dest_City':        'Destination_City_Name',
+            'Origin_Country':   'Origin_Country',
+            'Dest_Country':     'Destination_Country',
+            'ProductCategory':  'Product_Category',
+            'TransportMode':    'Transportation_Mode',
+            'DisruptionType':   'disruption_id',
             'MitigationAction': 'Mitigation_Action_Taken'
         }
         
         entity_stats = {}
         for entity_name, col_name in entity_columns.items():
             unique_count = self.df[col_name].nunique()
-            null_count = self.df[col_name].isna().sum()
+            null_count   = self.df[col_name].isna().sum()
             entity_stats[entity_name] = {
-                'column': col_name,
+                'column':        col_name,
                 'unique_values': int(unique_count),
-                'nulls': int(null_count)
+                'nulls':         int(null_count)
             }
             print(f"   {entity_name}: {unique_count} unique values (nulls: {null_count})")
         
@@ -318,21 +336,22 @@ class DataTransformer:
         Execute the complete transformation pipeline.
 
         Steps:
+            0. ID normalization       (disruption_id)
             1. Classification fields  (delay_severity, risk_level, cost_category)
             2. Boolean flags          (is_disrupted, is_delayed, is_mitigated, is_air_freight)
             3. Efficiency metrics     (lead_time_efficiency, cost_per_kg, delay_ratio)
             4. Resilience metrics     (mitigation_effective, cost_premium, route_segment)
             5. Risk assessment ID     (assessment_id)
             6. Entity validation      (presence and null check for all KG node columns)
-
-        Returns:
-            Tuple of (transformed DataFrame, transformation statistics dict)
         """
         print("="*60)
         print("STARTING DATA TRANSFORMATION PIPELINE")
         print("="*60)
         
         original_cols = len(self.df.columns)
+
+        print("\n--- STEP 0: ID NORMALIZATION ---")
+        self.create_disruption_id()
         
         print("\n--- STEP 1: CLASSIFICATION FIELDS ---")
         self.create_delay_severity()
@@ -357,8 +376,8 @@ class DataTransformer:
         new_cols = len(self.df.columns)
         self.transformation_stats['columns'] = {
             'original': original_cols,
-            'final': new_cols,
-            'added': new_cols - original_cols
+            'final':    new_cols,
+            'added':    new_cols - original_cols
         }
         
         print("\n" + "="*60)
@@ -369,17 +388,7 @@ class DataTransformer:
         return self.df, self.transformation_stats
     
     def save_output(self, output_dir: str = "data", filename: str = "data_transformed.csv"):
-        """
-        Save the transformed dataset and transformation statistics to disk.
-
-        Args:
-            output_dir: Directory where output files will be saved (default: 'data')
-            filename:   Name of the output CSV file (default: 'data_transformed.csv')
-
-        Outputs:
-            - {output_dir}/{filename}                 Transformed dataset as CSV
-            - {output_dir}/transformation_stats.json  Statistics from the pipeline
-        """
+        """Save transformed dataset and stats to disk."""
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, filename)
         self.df.to_csv(output_path, index=False)
@@ -391,13 +400,10 @@ class DataTransformer:
         print(f"\nSaved to {output_path} | Stats to {stats_path}")
     
     def get_new_columns(self) -> list:
-        """
-        Return the list of columns added by the transformer.
-
-        Returns:
-            List of column name strings added during the transformation pipeline.
-        """
+        """Return list of columns added by the transformer."""
         return [
+            # ID normalization
+            'disruption_id',
             # Classifications
             'delay_severity',
             'risk_level',

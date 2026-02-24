@@ -167,10 +167,7 @@ class DataExplorer:
 
 # Example usage
 if __name__ == "__main__":
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from data_pipeline.loader import DataLoader
+    from .loader import DataLoader
 
     # Load data
     loader = DataLoader()
