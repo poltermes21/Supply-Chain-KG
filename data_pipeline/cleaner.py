@@ -6,13 +6,9 @@ Outputs: validated dataset with flags + cleaning report.
 """
 
 import pandas as pd
-import numpy as np
 import json
 from typing import Dict, Tuple
 import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class DataCleaner:
@@ -33,9 +29,7 @@ class DataCleaner:
         self.normalization_stats = {}
         self.cleaning_actions = []
         
-    # =========================================================================
     # 1. FILL MISSING VALUES
-    # =========================================================================
     
     def fill_disruption_events(self):
         """
@@ -57,10 +51,8 @@ class DataCleaner:
         print(f"   Filled {missing_count} records with 'No_Disruption'")
         return missing_count
     
-    # =========================================================================
     # 2. CONVERT DATA TYPES
-    # =========================================================================
-    
+        
     def convert_order_date(self):
         """
         Convert Order_Date from string to datetime.
@@ -82,9 +74,7 @@ class DataCleaner:
         print(f"   Converted to datetime (invalid dates: {invalid_dates})")
         return invalid_dates
     
-    # =========================================================================
-    # 3. NORMALIZE LOCATION DATA (Separate City and Country)
-    # =========================================================================
+    # 3. NORMALIZE LOCATION DATA
     
     def normalize_locations(self):
         """
@@ -154,9 +144,7 @@ class DataCleaner:
         print(f"   Unique origins: {unique_origins}, destinations: {unique_destinations}")
         print(f"   Total unique countries: {unique_countries}")
     
-    # =========================================================================
     # 4. DETECT INCONSISTENCIES
-    # =========================================================================
     
     def validate_lead_time_logic(self):
         """
@@ -353,9 +341,7 @@ class DataCleaner:
         
         return total
     
-    # =========================================================================
     # 5. FLAG PROBLEMATIC RECORDS
-    # =========================================================================
     
     def flag_problematic_records(self):
         """
@@ -404,9 +390,7 @@ class DataCleaner:
         
         return flagged_count
     
-    # =========================================================================
     # 6. GENERATE REPORT
-    # =========================================================================
     
     def generate_cleaning_report(self) -> Dict:
         """
@@ -423,9 +407,7 @@ class DataCleaner:
         
         return report
     
-    # =========================================================================
     # MAIN PIPELINE
-    # =========================================================================
     
     def clean(self) -> Tuple[pd.DataFrame, Dict]:
         """
@@ -500,22 +482,17 @@ class DataCleaner:
             print(f"Saved {len(flagged)} flagged records to {flagged_path}")
 
 
-# Example usage
 if __name__ == "__main__":
     from .loader import DataLoader
     
-    # Load data
     loader = DataLoader()
     df = loader.load()
     
-    # Clean data
     cleaner = DataCleaner(df)
     df_cleaned, report = cleaner.clean()
     
-    # Save outputs
     cleaner.save_outputs()
     
-    # Print summary
     print("\n" + "="*60)
     print("CLEANING REPORT SUMMARY")
     print("="*60)

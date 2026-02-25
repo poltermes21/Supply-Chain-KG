@@ -26,9 +26,7 @@ class KGLoaderNeo4j:
             auth=(NEO4J_USER, NEO4J_PASSWORD)
         )
 
-    # =========================================================================
-    # CONSTRAINTS
-    # =========================================================================
+    # 1. CONSTRAINTS
 
     def create_constraint(self):
         """
@@ -48,9 +46,7 @@ class KGLoaderNeo4j:
 
         print("   Constraint ensured.")
 
-    # =========================================================================
-    # NODE LOADING
-    # =========================================================================
+    # 2. NODE LOADING
 
     def load_nodes(self):
         """
@@ -78,9 +74,7 @@ class KGLoaderNeo4j:
 
         print("   Node loading complete.")
 
-    # =========================================================================
-    # RELATIONSHIP LOADING
-    # =========================================================================
+    # 3. RELATIONSHIP LOADING
 
     def load_relationships(self):
         """
@@ -110,9 +104,7 @@ class KGLoaderNeo4j:
 
         print("   Relationship loading complete.")
 
-    # =========================================================================
     # MAIN PIPELINE
-    # =========================================================================
 
     def load(self):
         """
@@ -138,7 +130,6 @@ class KGLoaderNeo4j:
         self.driver.close()
 
 
-# Example usage
 if __name__ == "__main__":
     from .extractor import KGExtractor
     import pandas as pd

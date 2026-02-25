@@ -165,14 +165,11 @@ class DataExplorer:
         return self.stats
 
 
-# Example usage
 if __name__ == "__main__":
     from .loader import DataLoader
 
-    # Load data
     loader = DataLoader()
     df = loader.load()
-
-    # Explore data
+    
     explorer = DataExplorer(df)
     stats = explorer.explore()
