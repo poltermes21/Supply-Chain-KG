@@ -5,20 +5,10 @@ Runs the full data pipeline in sequence:
     1. Load    → DataLoader    reads the raw CSV
     2. Clean   → DataCleaner   validates, normalizes and flags inconsistencies
     3. Transform → DataTransformer  creates derived fields and KG-ready columns
-
-Outputs:
-    - data/data_cleaned.csv
-    - data/data_transformed.csv
-    - data/cleaning_report.json
-    - data/transformation_stats.json
 """
 
-import os
-import sys
 import json
 import time
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from settings import DATA_DIR, DATA_FILENAME
 
 from .loader import DataLoader
@@ -53,9 +43,7 @@ def run_pipeline(
     """
     pipeline_start = time.time()
 
-    # =========================================================================
-    # STEP 1: LOAD
-    # =========================================================================
+    # 1. LOAD
     _print_header("STEP 1: LOAD", verbose)
 
     loader = DataLoader(
@@ -68,9 +56,7 @@ def run_pipeline(
         print(f"   Loaded {len(df_raw)} rows, {len(df_raw.columns)} columns")
         print(f"   Source: {loader.filepath}")
 
-    # =========================================================================
-    # STEP 2: CLEAN
-    # =========================================================================
+    # 2. CLEAN
     _print_header("STEP 2: CLEAN", verbose)
 
     cleaner = DataCleaner(df_raw)
@@ -85,9 +71,7 @@ def run_pipeline(
         print(f"\n   Records flagged: {flagged}/{total} ({flagged/total*100:.2f}%)")
         print(f"   Inconsistencies: {json.dumps(cleaning_report['inconsistencies'], indent=6)}")
 
-    # =========================================================================
-    # STEP 3: TRANSFORM
-    # =========================================================================
+    # 3. TRANSFORM
     _print_header("STEP 3: TRANSFORM", verbose)
 
     transformer = DataTransformer(df_cleaned)
@@ -102,9 +86,7 @@ def run_pipeline(
         print(f"\n   Columns added: {added} (total: {final})")
         print(f"   New columns: {transformer.get_new_columns()}")
 
-    # =========================================================================
     # SUMMARY
-    # =========================================================================
     duration = round(time.time() - pipeline_start, 2)
     _print_header("PIPELINE COMPLETE", verbose)
 

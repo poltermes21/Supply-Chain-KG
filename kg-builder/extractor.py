@@ -7,10 +7,7 @@ needed to build the Knowledge Graph in Neo4j.
 
 import pandas as pd
 import os
-import sys
 from typing import Dict, List
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from settings import DATA_DIR
 
 
@@ -32,9 +29,7 @@ class KGExtractor:
         self.nodes = {}
         self.relationships = {}
 
-    # =========================================================================
-    # NODE EXTRACTION
-    # =========================================================================
+    # 1. NODE EXTRACTION
 
     def extract_order_nodes(self) -> List[Dict]:
         """
@@ -272,9 +267,7 @@ class KGExtractor:
         print(f"   Extracted {len(nodes)} MitigationAction nodes")
         return nodes
 
-    # =========================================================================
-    # RELATIONSHIP EXTRACTION
-    # =========================================================================
+    # 2. RELATIONSHIP EXTRACTION
 
     def extract_operative_relationships(self) -> Dict[str, List[Dict]]:
         """
@@ -451,9 +444,7 @@ class KGExtractor:
         self.relationships.update(rels)
         return rels
 
-    # =========================================================================
     # MAIN PIPELINE
-    # =========================================================================
 
     def extract(self) -> Dict:
         """
@@ -504,7 +495,6 @@ class KGExtractor:
         }
 
 
-# Example usage
 if __name__ == "__main__":
     df_transformed = pd.read_csv(os.path.join(DATA_DIR, "data_transformed.csv"))
     print(f"Loaded {len(df_transformed)} rows from data_transformed.csv\n")

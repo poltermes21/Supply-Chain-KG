@@ -13,11 +13,9 @@ Outputs:
 """
 
 import os
-import sys
 import time
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from settings import DATA_DIR
 
 from .extractor import KGExtractor
@@ -46,9 +44,7 @@ def run_graph_builder(
     """
     pipeline_start = time.time()
 
-    # =========================================================================
-    # STEP 1: EXTRACT
-    # =========================================================================
+    # 1. EXTRACT
     _print_header("STEP 1: EXTRACT", verbose)
 
     csv_path = os.path.join(data_dir or DATA_DIR, filename)
@@ -66,18 +62,14 @@ def run_graph_builder(
         print(f"\n   Nodes extracted:         {total_nodes:,}")
         print(f"   Relationships extracted: {total_rels:,}")
 
-    # =========================================================================
-    # STEP 2: LOAD
-    # =========================================================================
+    # 2: LOAD
     _print_header("STEP 2: LOAD INTO NEO4J", verbose)
 
     loader = KGLoaderNeo4j(kg_data)
     loader.load()
     loader.close()
 
-    # =========================================================================
     # SUMMARY
-    # =========================================================================
     duration = round(time.time() - pipeline_start, 2)
     _print_header("GRAPH BUILDER COMPLETE", verbose)
 

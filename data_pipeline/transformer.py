@@ -29,9 +29,7 @@ class DataTransformer:
         self.df = df.copy()
         self.transformation_stats = {}
 
-    # =========================================================================
     # 0. ID NORMALIZATION
-    # =========================================================================
 
     @staticmethod
     def normalize_disruption_id(value: str) -> str:
@@ -45,9 +43,9 @@ class DataTransformer:
             'Geopolitical Conflict (Route Diversion)' -> 'geopolitical_conflict'
             'Severe Weather (Typhoon/Storm)'          -> 'severe_weather'
         """
-        value = re.sub(r'\(.*?\)', '', value)      # strip parenthetical details
+        value = re.sub(r'\(.*?\)', '', value)
         value = value.lower().strip()
-        value = re.sub(r'[\s_]+', '_', value)      # spaces/underscores -> single underscore
+        value = re.sub(r'[\s_]+', '_', value)
         value = value.strip('_')
         return value
 
@@ -61,9 +59,7 @@ class DataTransformer:
         print(f"   Mapping: {dict(zip(self.df['Disruption_Event'].unique(), self.df['disruption_id'].unique()))}")
 
 
-    # =========================================================================
     # 1. CLASSIFICATION FIELDS
-    # =========================================================================
     
     def create_delay_severity(self):
         """
@@ -171,9 +167,7 @@ class DataTransformer:
         
         self.transformation_stats['cost_thresholds_by_category'] = category_thresholds
     
-    # =========================================================================
     # 2. BOOLEAN FLAGS
-    # =========================================================================
     
     def create_boolean_flags(self):
         """
@@ -202,9 +196,7 @@ class DataTransformer:
         }
         print(f"   Disrupted: {self.df['is_disrupted'].sum()}, Delayed: {self.df['is_delayed'].sum()}, Mitigated: {self.df['is_mitigated'].sum()}")
     
-    # =========================================================================
     # 3. CALCULATED METRICS
-    # =========================================================================
     
     def create_efficiency_metrics(self):
         """
@@ -265,9 +257,7 @@ class DataTransformer:
         print(f"   Effective mitigations: {self.df['mitigation_effective'].sum()}")
         print(f"   Avg cost premium disrupted orders: {self.df[self.df['is_disrupted']]['cost_premium'].mean():.2f}%")
 
-    # =========================================================================
     # 4. ENTITY PREPARATION
-    # =========================================================================
 
     def create_risk_assessment_id(self):
         """
@@ -327,9 +317,7 @@ class DataTransformer:
         
         self.transformation_stats['entities'] = entity_stats
     
-    # =========================================================================
-    # MAIN PIPELINE
-    # =========================================================================
+    # MAIN PIPELINNE
     
     def transform(self) -> Tuple[pd.DataFrame, Dict]:
         """

@@ -6,10 +6,6 @@ Handles loading the supply chain CSV file.
 
 import pandas as pd
 import os
-import sys
-
-# Add project root to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from settings import DATA_DIR, DATA_FILENAME
 
 
@@ -42,9 +38,7 @@ class DataLoader:
         return df
 
 
-# Example usage
 if __name__ == "__main__":
-    # Load data using settings defaults
     loader = DataLoader()
     df = loader.load()
     print(f"Loaded {len(df)} rows from {loader.filepath}")
