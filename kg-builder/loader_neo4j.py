@@ -2,7 +2,6 @@
 KG Loader Module
 
 Loads extracted nodes and relationships into Neo4j.
-
 """
 
 from neo4j import GraphDatabase
@@ -28,29 +27,35 @@ class KGLoaderNeo4j:
 
     # 1. CONSTRAINTS
 
-    def create_constraint(self):
+    def create_constraints(self):
         """
-        Create single universal uniqueness constraint on BaseNode.id.
+        Create uniqueness constraints for each node label.
         Safe to run multiple times.
         """
-        print("Creating universal ID constraint (if not exists)...")
-
-        query = """
-        CREATE CONSTRAINT node_id IF NOT EXISTS
-        FOR (n:BaseNode)
-        REQUIRE n.id IS UNIQUE
-        """
+        print("Creating uniqueness constraints (if not exists)...")
 
         with self.driver.session() as session:
-            session.run(query)
+            # Get all node labels from kg_data
+            for label in self.kg_data['nodes'].keys():
+                constraint_name = f"{label.lower()}_id"
+                
+                query = f"""
+                CREATE CONSTRAINT {constraint_name} IF NOT EXISTS
+                FOR (n:{label})
+                REQUIRE n.id IS UNIQUE
+                """
+                
+                session.run(query)
+                print(f"   Constraint for {label} ensured.")
 
-        print("   Constraint ensured.")
+        print("   All constraints ensured.")
 
     # 2. NODE LOADING
 
     def load_nodes(self):
         """
         Load all nodes into Neo4j using MERGE on indexed id.
+        Each node gets its specific label(s).
         """
 
         print("Loading nodes into Neo4j...")
@@ -64,9 +69,10 @@ class KGLoaderNeo4j:
 
                 print(f"   Loading {label} ({len(nodes)})")
 
+                # Use only the specific label, not BaseNode
                 query = f"""
                 UNWIND $batch AS node
-                MERGE (n:BaseNode:{label} {{id: node.id}})
+                MERGE (n:{label} {{id: node.id}})
                 SET n += node
                 """
 
@@ -78,10 +84,26 @@ class KGLoaderNeo4j:
 
     def load_relationships(self):
         """
-        Load all relationships using indexed MATCH on BaseNode.id.
+        Load all relationships using indexed MATCH on node id.
+        Matches any node type (no label restriction needed).
         """
 
         print("Loading relationships into Neo4j...")
+
+        # Define the labels for source and target of each relationship type
+        relationship_schemas = {
+            'ORIGIN_FROM':    ('Order', 'City'),
+            'DESTINATION_TO': ('Order', 'City'),
+            'SHIPPED_VIA':    ('Order', 'Route'),
+            'TRANSPORTS':     ('Order', 'ProductCategory'),
+            'USES_MODE':      ('Order', 'TransportMode'),
+            'AFFECTED_BY':    ('Order', 'DisruptionType'),
+            'MITIGATED_WITH': ('Order', 'MitigationAction'),
+            'HAS_RISK':       ('Order', 'RiskAssessment'),
+            'LOCATED_IN':     ('City', 'Country'),
+            'CONNECTS':       ('Route', 'City'),
+            'VULNERABLE_TO':  ('Route', 'DisruptionType'),
+        }
 
         with self.driver.session() as session:
 
@@ -92,10 +114,13 @@ class KGLoaderNeo4j:
 
                 print(f"   Loading {rel_type} ({len(rels)})")
 
+                # Get the correct labels for this relationship type
+                from_label, to_label = relationship_schemas[rel_type]
+
                 query = f"""
                 UNWIND $batch AS rel
-                MATCH (a:BaseNode {{id: rel.from}})
-                MATCH (b:BaseNode {{id: rel.to}})
+                MATCH (a:{from_label} {{id: rel.from}})
+                MATCH (b:{to_label} {{id: rel.to}})
                 MERGE (a)-[r:{rel_type}]->(b)
                 SET r += rel
                 """
@@ -117,7 +142,7 @@ class KGLoaderNeo4j:
         print("STARTING KG LOADING PIPELINE")
         print("=" * 60)
 
-        self.create_constraint()
+        self.create_constraints()
         self.load_nodes()
         self.load_relationships()
 
