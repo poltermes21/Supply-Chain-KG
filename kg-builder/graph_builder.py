@@ -48,7 +48,8 @@ def run_graph_builder(
     _print_header("STEP 1: EXTRACT", verbose)
 
     csv_path = os.path.join(data_dir or DATA_DIR, filename)
-    df_transformed = pd.read_csv(csv_path)
+    df_transformed = pd.read_csv(csv_path, parse_dates=['Order_Date'])
+    print(df_transformed.dtypes)
 
     if verbose:
         print(f"   Loaded {len(df_transformed)} rows from {csv_path}")

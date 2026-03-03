@@ -54,7 +54,7 @@ class KGExtractor:
         for _, row in self.df[order_cols].iterrows():
             nodes.append({
                 'id':                       row['Order_ID'],
-                'order_date':               str(row['Order_Date'].date()) if hasattr(row['Order_Date'], 'date') else str(row['Order_Date']),
+                'order_date':               row['Order_Date'].to_pydatetime().date(),
                 'base_lead_time_days':      int(row['Base_Lead_Time_Days']),
                 'scheduled_lead_time_days': int(row['Scheduled_Lead_Time_Days']),
                 'actual_lead_time_days':    int(row['Actual_Lead_Time_Days']),
@@ -135,11 +135,11 @@ class KGExtractor:
         """
         print("Extracting City nodes...")
 
-        origin_cities = self.df[['Origin_City_Name', 'Origin_Region']].rename(
-            columns={'Origin_City_Name': 'city_name', 'Origin_Region': 'region'}
+        origin_cities = self.df[['Origin_City_Name']].rename(
+            columns={'Origin_City_Name': 'city_name'}
         )
-        dest_cities = self.df[['Destination_City_Name', 'Destination_Region']].rename(
-            columns={'Destination_City_Name': 'city_name', 'Destination_Region': 'region'}
+        dest_cities = self.df[['Destination_City_Name']].rename(
+            columns={'Destination_City_Name': 'city_name'}
         )
 
         all_cities = pd.concat([origin_cities, dest_cities]).drop_duplicates(subset='city_name')
@@ -147,8 +147,7 @@ class KGExtractor:
         nodes = []
         for _, row in all_cities.iterrows():
             nodes.append({
-                'id':     row['city_name'],
-                'region': row['region'],
+                'id': row['city_name']
             })
 
         self.nodes['City'] = nodes
@@ -158,8 +157,6 @@ class KGExtractor:
     def extract_country_nodes(self) -> List[Dict]:
         """
         Extract Country master nodes.
-
-        id = country_code (e.g. 'CN') — short, clean, unambiguous
         """
         print("Extracting Country nodes...")
 
@@ -188,14 +185,18 @@ class KGExtractor:
         """
         Extract ProductCategory master nodes.
 
-        id = Product_Category (e.g. 'Textiles')
+        id             = product_category_id (numeric: 0, 1, 2...)
+        category_name  = Product_Category (e.g. 'Textiles')
         """
         print("Extracting ProductCategory nodes...")
 
+        category_map = self.df[['product_category_id', 'Product_Category']].drop_duplicates()
+
         nodes = []
-        for category in self.df['Product_Category'].unique():
+        for _, row in category_map.iterrows():
             nodes.append({
-                'id': category,
+                'id':            int(row['product_category_id']),
+                'name': row['Product_Category'],
             })
 
         self.nodes['ProductCategory'] = nodes
@@ -224,18 +225,20 @@ class KGExtractor:
         """
         Extract DisruptionType master nodes.
 
-        id           = disruption_id (normalized snake_case, e.g. 'port_congestion')
-        display_name = original Disruption_Event string (e.g. 'Port Congestion')
+        id             = disruption_id (numeric: 0, 1, 2...)
+        disruption_name = normalized snake_case (e.g. 'port_congestion')
+        display_name   = original Disruption_Event string (e.g. 'Port Congestion')
         """
         print("Extracting DisruptionType nodes...")
 
-        disruption_map = self.df[['disruption_id', 'Disruption_Event']].drop_duplicates()
+        disruption_map = self.df[['disruption_id', 'disruption_name', 'Disruption_Event']].drop_duplicates()
 
         nodes = []
         for _, row in disruption_map.iterrows():
             nodes.append({
-                'id':           row['disruption_id'],
-                'display_name': row['Disruption_Event'],
+                'id':              int(row['disruption_id']),
+                'name': row['disruption_name'],
+                'full_name':    row['Disruption_Event'],
             })
 
         self.nodes['DisruptionType'] = nodes
@@ -246,11 +249,14 @@ class KGExtractor:
         """
         Extract MitigationAction master nodes with aggregated effectiveness metrics.
 
-        id = Mitigation_Action_Taken (e.g. 'Standard Shipping')
+        id                  = mitigation_action_id (numeric: 0, 1, 2...)
+        action_name         = Mitigation_Action_Taken (e.g. 'Standard Shipping')
+        avg_cost_impact     = average shipping cost for this mitigation
+        avg_delay_reduction = average delay days for this mitigation
         """
         print("Extracting MitigationAction nodes...")
 
-        grouped = self.df.groupby('Mitigation_Action_Taken').agg(
+        grouped = self.df.groupby(['mitigation_action_id', 'Mitigation_Action_Taken']).agg(
             avg_cost_impact=('Shipping_Cost_USD', 'mean'),
             avg_delay_reduction=('Delay_Days', 'mean')
         ).reset_index()
@@ -258,7 +264,8 @@ class KGExtractor:
         nodes = []
         for _, row in grouped.iterrows():
             nodes.append({
-                'id':                  row['Mitigation_Action_Taken'],
+                'id':                  int(row['mitigation_action_id']),
+                'name':         row['Mitigation_Action_Taken'],
                 'avg_cost_impact':     round(float(row['avg_cost_impact']), 2),
                 'avg_delay_reduction': round(float(row['avg_delay_reduction']), 2),
             })
@@ -304,7 +311,7 @@ class KGExtractor:
             })
             transports.append({
                 'from':      order_id,
-                'to':        row['Product_Category'],
+                'to':        int(row['product_category_id']),
                 'weight_kg': int(row['Order_Weight_Kg']),
             })
             uses_mode.append({
@@ -326,6 +333,7 @@ class KGExtractor:
         self.relationships.update(rels)
         return rels
 
+
     def extract_risk_relationships(self) -> Dict[str, List[Dict]]:
         """
         Risk and response relationships.
@@ -345,11 +353,11 @@ class KGExtractor:
 
             affected_by.append({
                 'from': order_id,
-                'to':   row['disruption_id'],           # normalized snake_case id
+                'to':   int(row['disruption_id']),
             })
             mitigated_with.append({
                 'from': order_id,
-                'to':   row['Mitigation_Action_Taken'],
+                'to':   int(row['mitigation_action_id']),
             })
             has_risk.append({
                 'from': order_id,
@@ -427,7 +435,7 @@ class KGExtractor:
 
             vulnerable_to.append({
                 'from':      route,
-                'to':        disruption_id,
+                'to':        int(disruption_id),
                 'frequency': frequency,
                 'severity':  severity,
             })
