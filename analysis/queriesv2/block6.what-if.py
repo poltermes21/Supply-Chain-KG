@@ -1,0 +1,377 @@
+"""
+block6_whatif.py
+
+Block 6 — What-If Analysis and Failure Scenarios
+"What happens if a route or a critical city fails?"
+
+Queries:
+6.1 Route-shock overview
+6.2 Route-shock reroutability by OD lane
+6.3 Route-shock penalty estimate from observed alternatives
+6.4 Node-failure impact on directly incident lanes
+6.5 Weighted shortest path on CITY_FLOW
+6.6 Multi-node failure screening
+"""
+
+import pandas as pd
+from typing import List, Optional
+from analysis.queries.base import run_query
+
+class Block6Queries:
+    """
+    Block 6 is scenario-driven and therefore parameterized.
+    It uses:
+    - CITY_FLOW for OD-level shock analysis,
+    - CITY_FLOW (directed) for weighted shortest-path exploration,
+    - Order history to estimate rerouting penalties from observed alternatives.
+    """
+
+    # GDS PROJECTION: CITY_FLOW (DIRECTED)
+    # Used for weighted shortest-path analysis.
+
+    GDS_DROP_CITY_FLOW_DIRECTED = """
+        CALL gds.graph.drop('city_flow_directed', false)
+        YIELD graphName
+    """
+
+    GDS_PROJECT_CITY_FLOW_DIRECTED = """
+        CALL gds.graph.project(
+            'city_flow_directed',
+            'City',
+            {
+                CITY_FLOW: {
+                    orientation: 'NATURAL',
+                    properties: [
+                        'shipments',
+                        'avg_cost_usd',
+                        'avg_lead_time_days',
+                        'avg_combined_risk_score',
+                        'delay_rate_pct',
+                        'disrupted_rate_pct'
+                    ]
+                }
+            }
+        )
+    """
+
+    # 6.1 ROUTE-SHOCK OVERVIEW
+
+    ROUTE_SHOCK_OVERVIEW = """
+        MATCH (o_all:Order)
+        WITH count(o_all) AS total_orders
+
+        MATCH (o:Order)-[:SHIPPED_VIA]->(r:Route)
+        WHERE r.id IN $blocked_routes
+
+        WITH total_orders,
+            count(o) AS affected_shipments,
+            avg(o.shipping_cost_usd) AS avg_cost,
+            avg(o.actual_lead_time_days) AS avg_lead_time,
+            avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END) AS disruption_rate
+
+        RETURN
+            $blocked_routes AS blocked_routes,
+            affected_shipments,
+            round(100.0 * affected_shipments / toFloat(total_orders), 2) AS pct_total_network,
+            round(avg_cost, 2) AS avg_cost_usd,
+            round(avg_lead_time, 2) AS avg_lead_time_days,
+            round(100.0 * disruption_rate, 2) AS current_disruption_rate_pct
+    """
+
+    # 6.2 ROUTE-SHOCK REROUTABILITY
+
+    ROUTE_SHOCK_REROUTABILITY = """
+        MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
+        WITH
+            orig, dest, f,
+            [r IN f.routes_used WHERE r IN $blocked_routes] AS blocked_hits,
+            [r IN f.routes_used WHERE NOT r IN $blocked_routes] AS surviving_routes
+        WHERE size(blocked_hits) > 0
+        RETURN
+            orig.id AS origin,
+            dest.id AS destination,
+            f.shipments AS affected_shipments,
+            blocked_hits AS blocked_routes_hit,
+            surviving_routes AS surviving_routes,
+            size(surviving_routes) AS surviving_route_count,
+            f.primary_route AS primary_route,
+            round(f.primary_route_share_pct, 2) AS primary_route_share_pct,
+            CASE
+                WHEN size(surviving_routes) = 0 THEN 'stranded'
+                WHEN f.primary_route IN $blocked_routes THEN 'needs_rerouting'
+                ELSE 'partially_hedged'
+            END AS shock_status
+        ORDER BY surviving_route_count ASC, affected_shipments DESC
+    """
+
+    # 6.3 ROUTE-SHOCK PENALTY ESTIMATE
+
+    ROUTE_SHOCK_PENALTY_ESTIMATE = """
+        MATCH (o:Order)-[:ORIGIN_FROM]->(orig:City),
+            (o)-[:DESTINATION_TO]->(dest:City),
+            (o)-[:SHIPPED_VIA]->(r:Route)
+        WHERE r.id IN $blocked_routes
+        WITH
+            orig, dest,
+            count(o) AS affected_shipments,
+            avg(o.shipping_cost_usd) AS base_cost,
+            avg(o.actual_lead_time_days) AS base_lead
+        OPTIONAL MATCH (alt:Order)-[:ORIGIN_FROM]->(orig),
+                    (alt)-[:DESTINATION_TO]->(dest),
+                    (alt)-[:SHIPPED_VIA]->(alt_r:Route)
+        WHERE NOT alt_r.id IN $blocked_routes
+        WITH
+            orig, dest, affected_shipments, base_cost, base_lead,
+            [route IN collect(DISTINCT alt_r.id) WHERE route IS NOT NULL] AS alt_routes,
+            avg(alt.shipping_cost_usd) AS alt_cost,
+            avg(alt.actual_lead_time_days) AS alt_lead
+        RETURN
+            orig.id AS origin,
+            dest.id AS destination,
+            affected_shipments,
+            alt_routes AS observed_alternative_routes,
+            size(alt_routes) AS observed_alt_route_count,
+            CASE
+                WHEN size(alt_routes) = 0 THEN 'no_observed_alternative'
+                ELSE 'reroutable_from_history'
+            END AS rerouting_feasibility,
+            CASE WHEN alt_cost IS NULL THEN NULL ELSE round(alt_cost - base_cost, 2) END AS est_cost_delta_usd,
+            CASE WHEN alt_lead IS NULL THEN NULL ELSE round(alt_lead - base_lead, 2) END AS est_lead_delta_days
+        ORDER BY affected_shipments DESC
+    """
+
+    # 6.4 NODE-FAILURE LOCAL IMPACT
+    # Note:
+    # This query measures the impact on lanes directly incident to the failed city.
+    # It does not model hidden intermediate transit legs, since the current KG does
+    # not contain explicit ShipmentLeg entities.
+
+    NODE_FAILURE_LOCAL_IMPACT = """
+        MATCH (c:City)
+        WHERE c.id IN $blocked_cities
+
+        CALL {
+            WITH c
+            OPTIONAL MATCH (c)-[out:CITY_FLOW]->()
+            RETURN
+                c.id AS city,
+                coalesce(sum(out.shipments), 0) AS outbound_shipments,
+                count(out) AS outbound_lanes
+        }
+        CALL {
+            WITH c
+            OPTIONAL MATCH ()-[inc:CITY_FLOW]->(c)
+            RETURN
+                coalesce(sum(inc.shipments), 0) AS inbound_shipments,
+                count(inc) AS inbound_lanes
+        }
+
+        RETURN
+            city AS blocked_city,
+            outbound_shipments,
+            inbound_shipments,
+            outbound_lanes,
+            inbound_lanes,
+            outbound_shipments + inbound_shipments AS total_affected_shipments
+        ORDER BY total_affected_shipments DESC
+    """
+    
+    # 6.5 NODE-FAILURE GLOBAL IMPACT
+
+    NODE_FAILURE_GLOBAL_IMPACT = """
+        MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
+        WHERE orig.id IN $blocked_cities
+        OR dest.id IN $blocked_cities
+
+        RETURN
+            orig.id AS origin,
+            dest.id AS destination,
+            f.shipments AS affected_shipments,
+            f.avg_cost_usd AS avg_cost,
+            f.avg_lead_time_days AS avg_lead_time,
+            f.avg_combined_risk_score AS risk_score
+        ORDER BY affected_shipments DESC
+    """
+
+    # 6.6 SHORTEST PATH BY WEIGHT
+
+    SHORTEST_PATH_BY_WEIGHT = """
+        MATCH (source:City {id: $source_city}),
+            (target:City {id: $target_city})
+        CALL gds.shortestPath.dijkstra.stream('city_flow_directed', {
+            sourceNode: source,
+            targetNode: target,
+            relationshipWeightProperty: $weight_property
+        })
+        YIELD index, sourceNode, targetNode, totalCost, nodeIds, costs, path
+        RETURN
+            index,
+            gds.util.asNode(sourceNode).id AS source_city,
+            gds.util.asNode(targetNode).id AS target_city,
+            $weight_property AS optimized_for,
+            [nodeId IN nodeIds | gds.util.asNode(nodeId).id] AS path_cities,
+            round(totalCost, 2) AS total_path_cost,
+            [c IN costs | round(c, 2)] AS accumulated_costs
+        ORDER BY index
+    """
+
+    # EXECUTION HELPERS
+
+    @staticmethod
+    def _run_query_with_params(driver, query: str, **params) -> pd.DataFrame:
+        """
+        Run a parameterized Cypher query and return a DataFrame.
+        """
+        with driver.session() as session:
+            result = session.run(query, params)
+            return pd.DataFrame([record.data() for record in result])
+
+    @staticmethod
+    def _run_gds_shortest_path(driver, query: str, **params) -> pd.DataFrame:
+        """
+        Helper to safely run a shortest-path query:
+        1. Drop directed projection if exists
+        2. Create directed CITY_FLOW projection
+        3. Run Dijkstra
+        4. Drop projection
+        """
+        with driver.session() as session:
+            try:
+                session.run(Block6Queries.GDS_DROP_CITY_FLOW_DIRECTED)
+            except Exception:
+                pass
+
+            session.run(Block6Queries.GDS_PROJECT_CITY_FLOW_DIRECTED)
+            result = session.run(query, params)
+            df = pd.DataFrame([record.data() for record in result])
+
+            try:
+                session.run(Block6Queries.GDS_DROP_CITY_FLOW_DIRECTED)
+            except Exception:
+                pass
+
+        return df
+
+    # EXECUTION METHODS
+
+    @staticmethod
+    def route_shock_overview(driver, blocked_routes: List[str]) -> pd.DataFrame:
+        return Block6Queries._run_query_with_params(
+            driver,
+            Block6Queries.ROUTE_SHOCK_OVERVIEW,
+            blocked_routes=blocked_routes
+        )
+
+    @staticmethod
+    def route_shock_reroutability(driver, blocked_routes: List[str]) -> pd.DataFrame:
+        return Block6Queries._run_query_with_params(
+            driver,
+            Block6Queries.ROUTE_SHOCK_REROUTABILITY,
+            blocked_routes=blocked_routes
+        )
+
+    @staticmethod
+    def route_shock_penalty_estimate(driver, blocked_routes: List[str]) -> pd.DataFrame:
+        return Block6Queries._run_query_with_params(
+            driver,
+            Block6Queries.ROUTE_SHOCK_PENALTY_ESTIMATE,
+            blocked_routes=blocked_routes
+        )
+
+    @staticmethod
+    def node_failure_local_impact(driver, blocked_city: str) -> pd.DataFrame:
+        return Block6Queries._run_query_with_params(
+            driver,
+            Block6Queries.NODE_FAILURE_LOCAL_IMPACT,
+            blocked_city=blocked_city
+        )
+        
+    @staticmethod
+    def node_failure_global_impact(driver, blocked_cities: List[str]) -> pd.DataFrame:
+        return Block6Queries._run_query_with_params(
+            driver,
+            Block6Queries.NODE_FAILURE_GLOBAL_IMPACT,
+            blocked_cities=blocked_cities
+        )
+
+    @staticmethod
+    def shortest_path_by_weight(
+        driver,
+        source_city: str,
+        target_city: str,
+        weight_property: str = "avg_lead_time_days"
+    ) -> pd.DataFrame:
+        """
+        Find the shortest CITY_FLOW path between two cities using a selected weight.
+
+        Supported weights:
+        - avg_lead_time_days
+        - avg_cost_usd
+        - avg_combined_risk_score
+        """
+        allowed_weights = {
+            "avg_lead_time_days",
+            "avg_cost_usd",
+            "avg_combined_risk_score"
+        }
+
+        if weight_property not in allowed_weights:
+            raise ValueError(
+                f"Invalid weight_property '{weight_property}'. "
+                f"Choose one of: {sorted(allowed_weights)}"
+            )
+
+        return Block6Queries._run_gds_shortest_path(
+            driver,
+            Block6Queries.SHORTEST_PATH_BY_WEIGHT,
+            source_city=source_city,
+            target_city=target_city,
+            weight_property=weight_property
+        )
+
+    @staticmethod
+    def run_scenario_pack(
+        driver,
+        blocked_routes: Optional[List[str]] = None,
+        blocked_city: Optional[str] = None,
+        source_city: Optional[str] = None,
+        target_city: Optional[str] = None,
+        weight_property: str = "avg_lead_time_days",
+        blocked_cities: Optional[List[str]] = None
+    ) -> dict:
+        """
+        Run a scenario-oriented pack of Block 6 queries.
+
+        Args:
+            blocked_routes: List of blocked routes, e.g. ['Suez']
+            blocked_city:   Single failed city, e.g. 'Shanghai'
+            source_city:    Source for shortest-path analysis
+            target_city:    Target for shortest-path analysis
+            weight_property: Weight for Dijkstra
+            blocked_cities: List of failed cities for node failrues
+
+        Returns:
+            Dictionary of pandas DataFrames
+        """
+        results = {}
+
+        if blocked_routes:
+            results["route_shock_overview"] = Block6Queries.route_shock_overview(driver, blocked_routes)
+            results["route_shock_reroutability"] = Block6Queries.route_shock_reroutability(driver, blocked_routes)
+            results["route_shock_penalty_estimate"] = Block6Queries.route_shock_penalty_estimate(driver, blocked_routes)
+
+        if blocked_cities:
+            results["node_failure_local_impact"] = Block6Queries.node_failure__local_impact(driver, blocked_cities=blocked_cities)
+            
+        if blocked_cities:
+            results["node_failure_global_impact"] = Block6Queries.node_failure_global_impact(driver,blocked_cities=blocked_cities)
+
+        if source_city and target_city:
+            results["shortest_path_by_weight"] = Block6Queries.shortest_path_by_weight(
+                driver,
+                source_city=source_city,
+                target_city=target_city,
+                weight_property=weight_property
+            )
+
+        return results
