@@ -45,9 +45,10 @@ class KGExtractor:
             'Actual_Lead_Time_Days', 'Delay_Days',
             'Shipping_Cost_USD', 'Order_Weight_Kg',
             'Delivery_Status', 'cost_category',
-            'is_delayed', 'is_disrupted', 'is_mitigated', 'is_air_freight',
+            'is_delayed', 'is_disrupted',
             'delay_severity', 'lead_time_efficiency',
-            'cost_per_kg', 'delay_ratio', 'cost_premium'
+            'cost_per_kg', 'delay_ratio', 'cost_premium',
+            'mitigation_effectiveness', 'mitigation_effective'
         ]
 
         nodes = []
@@ -65,13 +66,13 @@ class KGExtractor:
                 'cost_category':            row['cost_category'],
                 'is_delayed':               bool(row['is_delayed']),
                 'is_disrupted':             bool(row['is_disrupted']),
-                'is_mitigated':             bool(row['is_mitigated']),
-                'is_air_freight':           bool(row['is_air_freight']),
                 'delay_severity':           row['delay_severity'],
                 'lead_time_efficiency':     round(float(row['lead_time_efficiency']), 2),
                 'cost_per_kg':              round(float(row['cost_per_kg']), 2),
                 'delay_ratio':              round(float(row['delay_ratio']), 2),
                 'cost_premium':             round(float(row['cost_premium']), 2),
+                'mitigation_effectiveness': row['mitigation_effectiveness'],   # ← nou
+                'mitigation_effective':     bool(row['mitigation_effective'])
             })
 
         self.nodes['Order'] = nodes
@@ -90,7 +91,7 @@ class KGExtractor:
             'assessment_id',
             'Geopolitical_Risk_Index', 'Weather_Severity_Index',
             'Inflation_Rate_Pct', 'combined_risk_score',
-            'risk_level', 'mitigation_effective'
+            'risk_level'
         ]
 
         nodes = []
@@ -101,8 +102,7 @@ class KGExtractor:
                 'weather_severity_index':  round(float(row['Weather_Severity_Index']), 2),
                 'inflation_rate_pct':      round(float(row['Inflation_Rate_Pct']), 4),
                 'combined_risk_score':     round(float(row['combined_risk_score']), 4),
-                'risk_level':              row['risk_level'],
-                'mitigation_effective':    bool(row['mitigation_effective']),
+                'risk_level':              row['risk_level']
             })
 
         self.nodes['RiskAssessment'] = nodes
@@ -451,6 +451,71 @@ class KGExtractor:
 
         self.relationships.update(rels)
         return rels
+    
+    def extract_city_flow_relationships(self) -> List[Dict]:
+        """
+        Analytical relationship layer:
+        Aggregates Order-level flows into one CITY_FLOW relationship per OD pair.
+        (City)-[:CITY_FLOW]->(City)
+        """
+        print("Extracting CITY_FLOW analytical relationships...")
+
+        required_cols = [
+            'Origin_City_Name',
+            'Destination_City_Name',
+            'Route_Type',
+            'Transportation_Mode',
+            'Shipping_Cost_USD',
+            'Actual_Lead_Time_Days',
+            'Delay_Days',
+            'Order_Weight_Kg',
+            'combined_risk_score',
+            'is_delayed',
+            'is_disrupted'
+        ]
+
+        missing = [c for c in required_cols if c not in self.df.columns]
+        if missing:
+            raise ValueError(f"Missing columns for CITY_FLOW extraction: {missing}")
+
+        city_flow = []
+
+        grouped = self.df.groupby(
+            ['Origin_City_Name', 'Destination_City_Name'],
+            dropna=False
+        )
+
+        for (origin, destination), group in grouped:
+            route_counts = group['Route_Type'].value_counts()
+            mode_counts = group['Transportation_Mode'].value_counts()
+
+            city_flow.append({
+                'from': origin,
+                'to': destination,
+
+                'shipments': int(len(group)),
+                'total_weight_kg': int(group['Order_Weight_Kg'].sum()),
+
+                'route_count': int(group['Route_Type'].nunique()),
+                'routes_used': sorted(group['Route_Type'].dropna().unique().tolist()),
+                'primary_route': route_counts.idxmax(),
+                'primary_route_share_pct': round(float(route_counts.iloc[0] / len(group) * 100), 2),
+
+                'dominant_mode': mode_counts.idxmax(),
+                'air_share_pct': round(float(group['Transportation_Mode'].eq('Air').mean() * 100), 2),
+
+                'avg_cost_usd': round(float(group['Shipping_Cost_USD'].mean()), 2),
+                'avg_lead_time_days': round(float(group['Actual_Lead_Time_Days'].mean()), 2),
+                'avg_delay_days': round(float(group['Delay_Days'].mean()), 2),
+
+                'delay_rate_pct': round(float(group['is_delayed'].mean() * 100), 2),
+                'disrupted_rate_pct': round(float(group['is_disrupted'].mean() * 100), 2),
+                'avg_combined_risk_score': round(float(group['combined_risk_score'].mean()), 4),
+            })
+
+        self.relationships['CITY_FLOW'] = city_flow
+        print(f"   CITY_FLOW: {len(city_flow)} relationships")
+        return city_flow
 
     # MAIN PIPELINE
 
@@ -483,6 +548,7 @@ class KGExtractor:
         self.extract_operative_relationships()
         self.extract_risk_relationships()
         self.extract_structural_relationships()
+        self.extract_city_flow_relationships()
 
         total_nodes = sum(len(v) for v in self.nodes.values())
         total_rels  = sum(len(v) for v in self.relationships.values())
@@ -504,7 +570,7 @@ class KGExtractor:
 
 
 if __name__ == "__main__":
-    df_transformed = pd.read_csv(os.path.join(DATA_DIR, "data_transformed.csv"))
+    df_transformed = pd.read_csv(os.path.join(DATA_DIR, "data_transformedv2.csv"))
     print(f"Loaded {len(df_transformed)} rows from data_transformed.csv\n")
 
     extractor = KGExtractor(df_transformed)

@@ -94,7 +94,9 @@ class DataCleaner:
             'UK': 'United Kingdom',
             'NL': 'Netherlands',
             'US': 'United States',
-            'SG': 'Singapore'
+            'SG': 'Singapore',
+            'BE': 'Belgium',
+            'KR': 'South Korea'
         }
         
         def split_location(location_str):
@@ -297,8 +299,8 @@ class DataCleaner:
         print("\nDetecting route/location inconsistencies...")
         
         # Define region mappings
-        asia_countries = ['India', 'China', 'Japan', 'Singapore']
-        europe_countries = ['Germany', 'United Kingdom', 'Netherlands']
+        asia_countries = ['India', 'China', 'Japan', 'Singapore', 'South Korea']
+        europe_countries = ['Germany', 'United Kingdom', 'Netherlands', 'Belgium']
         americas_countries = ['United States', 'Brazil']
         
         def get_region(country):
@@ -463,7 +465,7 @@ class DataCleaner:
         os.makedirs(output_dir, exist_ok=True)
         
         # Save validated dataset
-        validated_path = os.path.join(output_dir, "data_cleaned.csv")
+        validated_path = os.path.join(output_dir, "data_cleanedv2.csv")
         self.df.to_csv(validated_path, index=False)
         print(f"\nSaved cleaned dataset to {validated_path}")
         
