@@ -1,0 +1,239 @@
+"""
+block4_geographic.py
+
+Block 4 — Geographic Analysis and Community Detection
+"How does the logistics network cluster geographically and structurally?"
+
+Queries:
+4.1 Louvain community detection on CITY_FLOW
+4.2 Community membership by city
+4.3 Inter-community flows
+4.4 Country flow exposure
+4.5 Bidirectional hub profile
+"""
+
+import pandas as pd
+from analysis.queries.base import run_query
+
+class Block4Queries:
+    """
+    Block 4 focuses on geographic clustering and territorial dependence.
+    Community detection is run on the CITY_FLOW layer and written back
+    to City nodes as `community_id`, which is then reused for downstream queries.
+    """
+
+    # GDS PROJECTION: CITY_FLOW (UNDIRECTED)
+    # Used for community detection.
+
+    GDS_DROP_CITY_FLOW_UNDIRECTED = """
+        CALL gds.graph.drop('city_flow_undirected', false)
+        YIELD graphName
+    """
+
+    GDS_PROJECT_CITY_FLOW_UNDIRECTED = """
+        CALL gds.graph.project(
+            'city_flow_undirected',
+            'City',
+            {
+                CITY_FLOW: {
+                    orientation: 'UNDIRECTED',
+                    properties: [
+                        'shipments',
+                        'avg_cost_usd',
+                        'avg_lead_time_days',
+                        'avg_combined_risk_score',
+                        'delay_rate_pct',
+                        'disrupted_rate_pct'
+                    ]
+                }
+            }
+        )
+    """
+
+    # 4.1 WRITE LOUVAIN COMMUNITY ID BACK TO CITY NODES
+
+    LOUVAIN_WRITE_COMMUNITY_ID = """
+        CALL gds.louvain.write('city_flow_undirected', {
+            relationshipWeightProperty: 'shipments',
+            writeProperty: 'community_id'
+        })
+        YIELD communityCount, modularity, nodePropertiesWritten
+        RETURN
+            communityCount,
+            round(modularity, 4) AS modularity_score,
+            nodePropertiesWritten
+    """
+
+    # 4.2 COMMUNITY MEMBERSHIP BY CITY
+
+    COMMUNITIES_BY_CITY = """
+        MATCH (c:City)
+        WHERE c.community_id IS NOT NULL
+        RETURN
+            c.community_id AS community_id,
+            c.id AS city
+        ORDER BY community_id, city
+    """
+
+    # 4.3 INTER-COMMUNITY FLOWS
+
+    INTER_COMMUNITY_FLOWS = """
+        MATCH (a:City)-[f:CITY_FLOW]->(b:City)
+        WHERE a.community_id IS NOT NULL
+        AND b.community_id IS NOT NULL
+        AND a.community_id <> b.community_id
+        RETURN
+            a.id AS from_city,
+            b.id AS to_city,
+            a.community_id AS from_community,
+            b.community_id AS to_community,
+            f.shipments AS shipments,
+            f.primary_route AS primary_route,
+            round(f.avg_lead_time_days, 2) AS avg_lead_time_days
+        ORDER BY shipments DESC
+    """
+
+    # 4.4 COUNTRY FLOW EXPOSURE
+
+    COUNTRY_FLOW_EXPOSURE = """
+        CALL {
+            MATCH (:City)-[f:CITY_FLOW]->(:City)
+            RETURN sum(f.shipments) AS network_shipments
+        }
+        MATCH (c:City)-[:LOCATED_IN]->(cn:Country)
+        CALL {
+            WITH c
+            OPTIONAL MATCH (c)-[out:CITY_FLOW]->()
+            RETURN coalesce(sum(out.shipments), 0) AS outbound_shipments
+        }
+        CALL {
+            WITH c
+            OPTIONAL MATCH ()-[inc:CITY_FLOW]->(c)
+            RETURN coalesce(sum(inc.shipments), 0) AS inbound_shipments
+        }
+        WITH network_shipments, cn,
+            sum(outbound_shipments) AS outbound_shipments,
+            sum(inbound_shipments) AS inbound_shipments
+
+        RETURN
+            cn.country_name AS country,
+            cn.region AS region,
+            outbound_shipments,
+            inbound_shipments,
+            outbound_shipments + inbound_shipments AS total_incident_traffic,
+            round(
+                100.0 * (outbound_shipments + inbound_shipments) / toFloat(network_shipments),
+                2
+            ) AS pct_total_orders_touched
+        ORDER BY total_incident_traffic DESC
+    """
+
+    # 4.5 BIDIRECTIONAL HUBS
+
+    BIDIRECTIONAL_HUBS = """
+        MATCH (c:City)
+        CALL {
+            WITH c
+            OPTIONAL MATCH (c)-[out:CITY_FLOW]->()
+            RETURN
+                coalesce(sum(out.shipments), 0) AS outbound_shipments,
+                count(out) AS outbound_lanes
+        }
+        CALL {
+            WITH c
+            OPTIONAL MATCH ()-[inc:CITY_FLOW]->(c)
+            RETURN
+                coalesce(sum(inc.shipments), 0) AS inbound_shipments,
+                count(inc) AS inbound_lanes
+        }
+        RETURN
+            c.id AS city,
+            outbound_shipments,
+            inbound_shipments,
+            outbound_lanes,
+            inbound_lanes,
+            outbound_shipments + inbound_shipments AS total_incident_traffic,
+            CASE
+                WHEN outbound_lanes > 0 AND inbound_lanes > 0 THEN true
+                ELSE false
+            END AS is_bidirectional_hub
+        ORDER BY total_incident_traffic DESC
+    """
+
+    # EXECUTION HELPERS
+
+    @staticmethod
+    def _run_gds_write(driver, drop_query: str, project_query: str, write_query: str) -> pd.DataFrame:
+        """
+        Helper to safely run a GDS write algorithm:
+        1. Drop projection if exists
+        2. Create projection
+        3. Run write algorithm
+        4. Drop projection
+        """
+        with driver.session() as session:
+            try:
+                session.run(drop_query)
+            except Exception:
+                pass
+
+            session.run(project_query)
+            result = session.run(write_query)
+            df = pd.DataFrame([record.data() for record in result])
+
+            try:
+                session.run(drop_query)
+            except Exception:
+                pass
+
+        return df
+
+    # EXECUTION METHODS
+
+    @staticmethod
+    def write_community_id(driver) -> pd.DataFrame:
+        """
+        Run Louvain and write community_id back to City nodes.
+        This method should be executed before reading community-based queries.
+        """
+        return Block4Queries._run_gds_write(
+            driver,
+            Block4Queries.GDS_DROP_CITY_FLOW_UNDIRECTED,
+            Block4Queries.GDS_PROJECT_CITY_FLOW_UNDIRECTED,
+            Block4Queries.LOUVAIN_WRITE_COMMUNITY_ID
+        )
+
+    @staticmethod
+    def communities_by_city(driver) -> pd.DataFrame:
+        return run_query(driver, Block4Queries.COMMUNITIES_BY_CITY)
+
+    @staticmethod
+    def inter_community_flows(driver) -> pd.DataFrame:
+        return run_query(driver, Block4Queries.INTER_COMMUNITY_FLOWS)
+
+    @staticmethod
+    def country_flow_exposure(driver) -> pd.DataFrame:
+        return run_query(driver, Block4Queries.COUNTRY_FLOW_EXPOSURE)
+
+    @staticmethod
+    def bidirectional_hubs(driver) -> pd.DataFrame:
+        return run_query(driver, Block4Queries.BIDIRECTIONAL_HUBS)
+
+    @staticmethod
+    def run_all(driver) -> dict:
+        """
+        Run all Block 4 queries.
+
+        Note:
+            Louvain is first written back to City nodes as `community_id`,
+            and the remaining queries then reuse that property.
+        """
+        louvain_stats = Block4Queries.write_community_id(driver)
+
+        return {
+            "louvain_write_stats":   louvain_stats,
+            "communities_by_city":   Block4Queries.communities_by_city(driver),
+            "inter_community_flows": Block4Queries.inter_community_flows(driver),
+            "country_flow_exposure": Block4Queries.country_flow_exposure(driver),
+            "bidirectional_hubs":    Block4Queries.bidirectional_hubs(driver),
+        }

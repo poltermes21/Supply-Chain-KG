@@ -1,0 +1,188 @@
+"""
+block2_risk.py
+
+Block 2 — Multidimensional Risk Analysis
+"Where does risk concentrate and how strongly does it translate into disruption?"
+
+Queries:
+2.1 Global risk level distribution
+2.2 Risk exposure by route
+2.3 Risk exposure by product category
+2.4 Risk buckets vs. operational outcomes
+2.5 Joint high-risk exposure (geopolitical + weather)
+2.6 Critical OD lanes by risk concentration
+"""
+
+import pandas as pd
+from analysis.queries.base import run_query
+
+class Block2Queries:
+    """
+    Block 2 isolates risk exposure and risk-outcome relationships.ç
+    It deliberately excludes mitigation evaluation, which belongs to Block 5.
+    """
+
+    # 2.1 GLOBAL RISK LEVEL DISTRIBUTION
+
+    RISK_LEVEL_GLOBAL = """
+        MATCH (o:Order)
+        WITH count(o) AS total_orders
+
+        MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
+        WITH total_orders,
+            ra.risk_level AS risk_level,
+            count(o) AS total_shipments,
+            avg(ra.combined_risk_score) AS avg_combined_risk_score
+
+        RETURN
+            risk_level,
+            total_shipments,
+            round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total,
+            round(avg_combined_risk_score, 4) AS avg_combined_risk_score
+        ORDER BY
+            CASE risk_level
+                WHEN 'low' THEN 1
+                WHEN 'medium' THEN 2
+                WHEN 'high' THEN 3
+                WHEN 'critical' THEN 4
+                ELSE 5
+            END
+    """
+
+    # 2.2 RISK EXPOSURE BY ROUTE
+
+    RISK_EXPOSURE_BY_ROUTE = """
+        MATCH (o:Order)-[:SHIPPED_VIA]->(r:Route),
+            (o)-[:HAS_RISK]->(ra:RiskAssessment)
+        RETURN
+            r.id AS route,
+            count(o) AS total_shipments,
+            round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
+            round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
+            round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
+            round(100.0 * avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END), 2) AS disruption_rate_pct,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
+        ORDER BY avg_combined_risk_score DESC
+    """
+
+    # 2.3 RISK EXPOSURE BY PRODUCT CATEGORY
+
+    RISK_EXPOSURE_BY_PRODUCT = """
+        MATCH (o:Order)-[:TRANSPORTS]->(p:ProductCategory),
+            (o)-[:HAS_RISK]->(ra:RiskAssessment)
+        RETURN
+            p.name AS product_category,
+            count(o) AS total_shipments,
+            round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
+            round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
+            round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
+            round(100.0 * avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END), 2) AS disruption_rate_pct,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
+        ORDER BY avg_combined_risk_score DESC
+    """
+
+    # 2.4 RISK BUCKETS VS. OUTCOMES
+
+    RISK_BUCKETS_VS_OUTCOME = """
+        MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
+        WITH o,
+            CASE
+                WHEN ra.combined_risk_score < 0.25 THEN '0.00-0.24'
+                WHEN ra.combined_risk_score < 0.50 THEN '0.25-0.49'
+                WHEN ra.combined_risk_score < 0.75 THEN '0.50-0.74'
+                ELSE '0.75-1.00'
+            END AS risk_bucket
+        RETURN
+            risk_bucket,
+            count(o) AS total_shipments,
+            round(100.0 * avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END), 2) AS disruption_rate_pct,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct,
+            round(avg(o.delay_days), 2) AS avg_delay_days
+        ORDER BY risk_bucket
+    """
+
+    # 2.5 JOINT HIGH-RISK EXPOSURE
+
+    JOINT_HIGH_RISK_EXPOSURE = """
+        MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
+        WHERE ra.geopolitical_risk_index >= 0.6
+        AND ra.weather_severity_index >= 6
+        MATCH (o)-[:SHIPPED_VIA]->(r:Route)
+        MATCH (o)-[:AFFECTED_BY]->(d:DisruptionType)
+
+        WITH r,
+            count(o) AS total_shipments,
+            avg(ra.combined_risk_score) AS avg_risk,
+            avg(o.delay_days) AS avg_delay,
+            avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END) AS disruption_rate,
+            collect(DISTINCT coalesce(d.full_name, 'No disruption')) AS disruption_types
+
+        RETURN
+            r.id AS route,
+            disruption_types,
+            total_shipments,
+            round(avg_risk, 4) AS avg_combined_risk_score,
+            round(avg_delay, 2) AS avg_delay_days,
+            round(100.0 * disruption_rate, 2) AS disruption_rate_pct
+        ORDER BY total_shipments DESC
+    """
+
+    # 2.6 CRITICAL OD LANES BY RISK
+
+    CRITICAL_LANES_BY_RISK = """
+        MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
+        RETURN
+            orig.id AS origin,
+            dest.id AS destination,
+            f.shipments AS shipments,
+            round(f.avg_combined_risk_score, 4) AS avg_combined_risk_score,
+            round(f.disrupted_rate_pct, 2) AS disrupted_rate_pct,
+            round(f.delay_rate_pct, 2) AS delay_rate_pct,
+            f.primary_route AS primary_route,
+            round(f.primary_route_share_pct, 2) AS primary_route_share_pct
+        ORDER BY avg_combined_risk_score DESC, disrupted_rate_pct DESC, shipments DESC
+        LIMIT 15
+    """
+
+    # EXECUTION METHODS
+
+    @staticmethod
+    def risk_level_global(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.RISK_LEVEL_GLOBAL)
+
+    @staticmethod
+    def risk_exposure_by_route(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.RISK_EXPOSURE_BY_ROUTE)
+
+    @staticmethod
+    def risk_exposure_by_product(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.RISK_EXPOSURE_BY_PRODUCT)
+
+    @staticmethod
+    def risk_buckets_vs_outcome(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.RISK_BUCKETS_VS_OUTCOME)
+
+    @staticmethod
+    def joint_high_risk_exposure(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.JOINT_HIGH_RISK_EXPOSURE)
+
+    @staticmethod
+    def critical_lanes_by_risk(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.CRITICAL_LANES_BY_RISK)
+
+    @staticmethod
+    def run_all(driver) -> dict:
+        """
+        Run all Block 2 queries.
+
+        Returns:
+            Dictionary of pandas DataFrames
+        """
+        return {
+            "risk_level_global":        Block2Queries.risk_level_global(driver),
+            "risk_exposure_by_route":   Block2Queries.risk_exposure_by_route(driver),
+            "risk_exposure_by_product": Block2Queries.risk_exposure_by_product(driver),
+            "risk_buckets_vs_outcome":  Block2Queries.risk_buckets_vs_outcome(driver),
+            "joint_high_risk_exposure": Block2Queries.joint_high_risk_exposure(driver),
+            "critical_lanes_by_risk":   Block2Queries.critical_lanes_by_risk(driver),
+        }
