@@ -103,6 +103,7 @@ class KGLoaderNeo4j:
             'LOCATED_IN':     ('City', 'Country'),
             'CONNECTS':       ('Route', 'City'),
             'VULNERABLE_TO':  ('Route', 'DisruptionType'),
+            'CITY_FLOW':      ('City',  'City'),
         }
 
         with self.driver.session() as session:

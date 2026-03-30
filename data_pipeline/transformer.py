@@ -234,23 +234,18 @@ class DataTransformer:
         Flags created:
             - is_disrupted: True if a disruption event occurred (Disruption_Event != 'No_Disruption')
             - is_delayed: True if the order was delivered late (Delivery_Status == 'Late')
-            - is_mitigated: True if a special mitigation action was applied (Mitigation_Action_Taken != 'Standard Shipping')
-            - is_air_freight: True if transported by air
         """
         print("Creating boolean flags...")
         
         self.df['is_disrupted'] = self.df['Disruption_Event'] != 'No_Disruption'
         self.df['is_delayed'] = self.df['Delivery_Status'] == 'Late'
-        self.df['is_mitigated'] = self.df['Mitigation_Action_Taken'] != 'Standard Shipping'
-        self.df['is_air_freight'] = self.df['Transportation_Mode'] == 'Air'
         
         self.transformation_stats['flags'] = {
             'disrupted_orders': int(self.df['is_disrupted'].sum()),
-            'delayed_orders': int(self.df['is_delayed'].sum()),
-            'mitigated_orders': int(self.df['is_mitigated'].sum())
+            'delayed_orders': int(self.df['is_delayed'].sum())
         }
         
-        print(f"  Disrupted: {self.df['is_disrupted'].sum()}, Delayed: {self.df['is_delayed'].sum()}, Mitigated: {self.df['is_mitigated'].sum()}")
+        print(f"  Disrupted: {self.df['is_disrupted'].sum()}, Delayed: {self.df['is_delayed'].sum()}")
     
     # 3. CALCULATED METRICS
     
@@ -285,33 +280,73 @@ class DataTransformer:
     def create_resilience_metrics(self):
         """
         Create metrics specifically for resilience analysis.
-        
+
         Metrics created:
-            - mitigation_effective (bool): is_disrupted AND NOT is_delayed
+            - mitigation_effectiveness (str): 4-level classification of mitigation outcome
+            - mitigation_effective (bool): True if fully or partially effective
             - cost_premium (%): (cost - avg_normal_cost) / avg_normal_cost * 100
             - route_segment (str): "{Origin_Region}_to_{Destination_Region}"
         """
         print("Creating resilience metrics...")
-        
-        self.df['mitigation_effective'] = (
-            self.df['is_disrupted'] & ~self.df['is_delayed']
+
+        conditions = [
+            ~self.df['is_disrupted'],
+            self.df['is_disrupted'] & ~self.df['is_delayed'],
+            self.df['is_disrupted'] & self.df['is_delayed'] & (self.df['delay_severity'] == 'minor'),
+            self.df['is_disrupted'] & self.df['is_delayed'] & ~(self.df['delay_severity'] == 'minor'),
+        ]
+        choices = [
+            'not_applicable',
+            'fully_effective',
+            'partially_effective',
+            'not_effective',
+        ]
+        self.df['mitigation_effectiveness'] = np.select(conditions, choices, default='unknown')
+
+        self.df['mitigation_effective'] = self.df['mitigation_effectiveness'].isin(
+            ['fully_effective', 'partially_effective']
         )
-        
-        avg_normal_cost = self.df[~self.df['is_disrupted']]['Shipping_Cost_USD'].mean()
-        self.df['cost_premium'] = (
-            (self.df['Shipping_Cost_USD'] - avg_normal_cost) / avg_normal_cost * 100
-        ).round(2)
-        
+
         self.df['route_segment'] = (
             self.df['Origin_Region'] + '_to_' + self.df['Destination_Region']
         )
         
+                # 1. Crear weight buckets
+        self.df['weight_bucket'] = pd.qcut(
+            self.df['Order_Weight_Kg'], 
+            q=4, 
+            labels=False, 
+            duplicates='drop'
+        )
+
+        # 2. Baseline segmentat (només no disruptives)
+        baseline = (
+            self.df[~self.df['is_disrupted']]
+            .groupby(['route_segment', 'Transportation_Mode', 'weight_bucket'])['Shipping_Cost_USD']
+            .median() 
+        )
+
+        # 3. Assignar baseline a cada fila
+        self.df = self.df.join(
+            baseline,
+            on=['route_segment', 'Transportation_Mode', 'weight_bucket'],
+            rsuffix='_baseline'
+        )
+
+        # 4. Cost premium
+        self.df['cost_premium'] = (
+            (self.df['Shipping_Cost_USD'] - self.df['Shipping_Cost_USD_baseline']) /
+            self.df['Shipping_Cost_USD_baseline'] * 100
+        )
+
         self.transformation_stats['resilience'] = {
+            'mitigation_effectiveness_distribution': self.df['mitigation_effectiveness'].value_counts().to_dict(),
             'effective_mitigations': int(self.df['mitigation_effective'].sum()),
             'unique_route_segments': int(self.df['route_segment'].nunique())
         }
-        
-        print(f"  Effective mitigations: {self.df['mitigation_effective'].sum()}")
+
+        print(f"  Effectiveness distribution: {self.df['mitigation_effectiveness'].value_counts().to_dict()}")
+        print(f"  Effective mitigations (fully + partially): {self.df['mitigation_effective'].sum()}")
         print(f"  Avg cost premium disrupted orders: {self.df[self.df['is_disrupted']]['cost_premium'].mean():.2f}%")
     
     # 4. ENTITY PREPARATION
@@ -383,7 +418,7 @@ class DataTransformer:
         Steps:
             0. ID normalization (numeric IDs + disruption_name)
             1. Classification fields (delay_severity, risk_level, cost_category)
-            2. Boolean flags (is_disrupted, is_delayed, is_mitigated, is_air_freight)
+            2. Boolean flags (is_disrupted, is_delayed)
             3. Efficiency metrics (lead_time_efficiency, cost_per_kg, delay_ratio)
             4. Resilience metrics (mitigation_effective, cost_premium, route_segment)
             5. Risk assessment ID (assessment_id)
@@ -433,7 +468,7 @@ class DataTransformer:
         
         return self.df, self.transformation_stats
     
-    def save_output(self, output_dir: str = "data", filename: str = "data_transformed.csv"):
+    def save_output(self, output_dir: str = "data", filename: str = "data_transformedv2.csv"):
         """Save transformed dataset and stats to disk."""
         os.makedirs(output_dir, exist_ok=True)
         
@@ -470,13 +505,12 @@ class DataTransformer:
             # Boolean flags
             'is_disrupted',
             'is_delayed',
-            'is_mitigated',
-            'is_air_freight',
             # Efficiency metrics
             'lead_time_efficiency',
             'cost_per_kg',
             'delay_ratio',
             # Resilience metrics
+            'mitigation_effectiveness'
             'mitigation_effective',
             'cost_premium',
             'route_segment',
@@ -495,7 +529,7 @@ class DataTransformer:
 if __name__ == "__main__":
     from settings import DATA_DIR
     
-    df_cleaned = pd.read_csv(os.path.join(DATA_DIR, "data_cleaned.csv"))
+    df_cleaned = pd.read_csv(os.path.join(DATA_DIR, "data_cleanedv2.csv"))
     print(f"Loaded {len(df_cleaned)} rows from data_cleaned.csv")
     
     transformer = DataTransformer(df_cleaned)

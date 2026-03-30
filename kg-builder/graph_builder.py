@@ -24,7 +24,7 @@ from .loader_neo4j import KGLoaderNeo4j
 
 def run_graph_builder(
     data_dir: str = None,
-    filename: str = "data_transformed.csv",
+    filename: str = "data_transformedv2.csv",
     verbose: bool = True
 ) -> dict:
     """
