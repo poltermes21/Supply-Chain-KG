@@ -1,13 +1,11 @@
 """
-bloc1_operatiu.py
-=================
-Bloc 1 — Caracterització Operativa de la Xarxa
-"Com funciona la xarxa en condicions normals?"
+Block 1 — Caracterització Operativa de la Xarxa
+"How does the supply chain work under normal conditions?"
 
-Consultes:
-    1.1 Distribució d'enviaments (per ruta, mode, producte, origen, destí, matriu OD)
-    1.2 KPIs base i taxa de retard (global + per segment)
-    1.3 Distribució de delay_severity i cost_category
+Queries:
+    1.1 Shipment distribution (by route, mode, product, origin, destination, OD matrix)
+    1.2 Baseline KPIs and delay rate (overall + by segment)
+    1.3 Distribution of delay severity and cost category
 """
 
 import pandas as pd
@@ -16,7 +14,7 @@ from analysis.queries.base import run_query
 
 class Block1Queries:
 
-    # ── 1.1 DISTRIBUCIÓ D'ENVIAMENTS ──────────────────────────────────────────
+    # 1.1. SHIPMENT DISTRIBUTION
 
     SHIPMENTS_BY_ROUTE = """
         MATCH (o:Order)-[:SHIPPED_VIA]->(r:Route)
@@ -75,7 +73,7 @@ class Block1Queries:
     """
     
 
-    # ── 1.2 KPIs BASE I TAXA DE RETARD ────────────────────────────────────────
+    # 1.2 BASELINE KPIs AND DELATY RATE
 
     GLOBAL_KPIS = """
         MATCH (o:Order)
@@ -96,8 +94,9 @@ class Block1Queries:
             count(o) AS total_shipments,
             sum(CASE WHEN o.is_delayed = true THEN 1 ELSE 0 END) AS delayed_shipments,
             round(100.0 * sum(CASE WHEN o.is_delayed = true THEN 1 ELSE 0 END) / count(o)) AS delay_rate_pct,
+            round(avg(o.scheduled_lead_time_days), 2) AS avg_scheduled_lead_time_days,
             round(avg(o.delay_days), 2) AS avg_delay_days,
-            round(avg(o.actual_lead_time_days), 2) AS avg_lead_time_days
+            round(avg(o.actual_lead_time_days), 2) AS avg_actual_lead_time_days
         ORDER BY delay_rate_pct DESC
     """
 
@@ -142,7 +141,7 @@ class Block1Queries:
         ORDER BY delay_rate_pct DESC
     """
 
-    # ── 1.3 DISTRIBUCIÓ DE DELAY_SEVERITY I COST_CATEGORY ────────────────────
+    # 1.3 DISTRIBUTION OF DELAY SEVERITY AND COST CATEGORY 
 
     DELAY_SEVERITY_GLOBAL = """
         MATCH (o:Order)
@@ -196,7 +195,7 @@ class Block1Queries:
         ORDER BY product_category, cost_category
     """
 
-    # ── MÈTODES D'EXECUCIÓ ────────────────────────────────────────────────────
+    # EXECUTION METHODS
 
     @staticmethod
     def shipments_by_route(driver) -> pd.DataFrame:
@@ -265,25 +264,26 @@ class Block1Queries:
     @staticmethod
     def run_all(driver) -> dict:
         """
-        Executa totes les consultes del Bloc 1.
-        Retorna un diccionari de DataFrames per usar a la app Streamlit.
+        Run all queries in Block1
+        
+        Returns:
+            Dictionary of pandas DataFrames
         """
         return {
-            # 1.1 Distribució
             "shipments_by_route":           Block1Queries.shipments_by_route(driver),
             "shipments_by_transport_mode":  Block1Queries.shipments_by_transport_mode(driver),
             "shipments_by_product":         Block1Queries.shipments_by_product_category(driver),
             "shipments_by_origin":          Block1Queries.shipments_by_origin_city(driver),
             "shipments_by_destination":     Block1Queries.shipments_by_destination_city(driver),
             # "shipments_od_matrix":          Block1Queries.shipments_od_matrix(driver),
-            # 1.2 KPIs i retard
+            
             "global_kpis":                  Block1Queries.global_kpis(driver),
             "delay_by_route":               Block1Queries.delay_rate_by_route(driver),
             "delay_by_product":             Block1Queries.delay_rate_by_product(driver),
             "delay_by_origin":              Block1Queries.delay_rate_by_origin(driver),
             "delay_by_destination":         Block1Queries.delay_rate_by_destination(driver),
             "delay_by_mode":                Block1Queries.delay_rate_by_transport_mode(driver),
-            # 1.3 Severity i cost
+            
             "delay_severity_global":        Block1Queries.delay_severity_global(driver),
             "delay_severity_by_route":      Block1Queries.delay_severity_by_route(driver),
             "cost_category_by_route":       Block1Queries.cost_category_by_route(driver),
