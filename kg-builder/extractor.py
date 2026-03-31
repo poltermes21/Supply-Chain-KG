@@ -141,13 +141,31 @@ class KGExtractor:
         dest_cities = self.df[['Destination_City_Name']].rename(
             columns={'Destination_City_Name': 'city_name'}
         )
+        
+        outbound_counts = self.df['Origin_City_Name'].value_counts()
+        inbound_counts = self.df['Destination_City_Name'].value_counts()
 
         all_cities = pd.concat([origin_cities, dest_cities]).drop_duplicates(subset='city_name')
 
         nodes = []
-        for _, row in all_cities.iterrows():
+        for city in all_cities['city_name']:
+            outbound = outbound_counts.get(city, 0)
+            inbound = inbound_counts.get(city, 0)
+
+            if outbound > 0 and inbound > 0:
+                role = 'H'  # Hub
+            elif outbound > 0:
+                role = 'O'  # Origin
+            elif inbound > 0:
+                role = 'D'  # Destination
+            else:
+                role = 'isolated'
+
             nodes.append({
-                'id': row['city_name']
+                'id': city,
+                'role': role,
+                'outbound_degree': int(outbound),
+                'inbound_degree': int(inbound)
             })
 
         self.nodes['City'] = nodes
