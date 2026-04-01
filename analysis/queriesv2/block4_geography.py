@@ -128,38 +128,6 @@ class Block4Queries:
         ORDER BY total_incident_traffic DESC
     """
 
-    # 4.5 BIDIRECTIONAL HUBS
-
-    BIDIRECTIONAL_HUBS = """
-        MATCH (c:City)
-        CALL {
-            WITH c
-            OPTIONAL MATCH (c)-[out:CITY_FLOW]->()
-            RETURN
-                coalesce(sum(out.shipments), 0) AS outbound_shipments,
-                count(out) AS outbound_lanes
-        }
-        CALL {
-            WITH c
-            OPTIONAL MATCH ()-[inc:CITY_FLOW]->(c)
-            RETURN
-                coalesce(sum(inc.shipments), 0) AS inbound_shipments,
-                count(inc) AS inbound_lanes
-        }
-        RETURN
-            c.id AS city,
-            outbound_shipments,
-            inbound_shipments,
-            outbound_lanes,
-            inbound_lanes,
-            outbound_shipments + inbound_shipments AS total_incident_traffic,
-            CASE
-                WHEN outbound_lanes > 0 AND inbound_lanes > 0 THEN true
-                ELSE false
-            END AS is_bidirectional_hub
-        ORDER BY total_incident_traffic DESC
-    """
-
     # EXECUTION HELPERS
 
     @staticmethod
@@ -216,10 +184,6 @@ class Block4Queries:
         return run_query(driver, Block4Queries.COUNTRY_FLOW_EXPOSURE)
 
     @staticmethod
-    def bidirectional_hubs(driver) -> pd.DataFrame:
-        return run_query(driver, Block4Queries.BIDIRECTIONAL_HUBS)
-
-    @staticmethod
     def run_all(driver) -> dict:
         """
         Run all Block 4 queries.
@@ -234,6 +198,5 @@ class Block4Queries:
             "louvain_write_stats":   louvain_stats,
             "communities_by_city":   Block4Queries.communities_by_city(driver),
             "inter_community_flows": Block4Queries.inter_community_flows(driver),
-            "country_flow_exposure": Block4Queries.country_flow_exposure(driver),
-            "bidirectional_hubs":    Block4Queries.bidirectional_hubs(driver),
+            "country_flow_exposure": Block4Queries.country_flow_exposure(driver)
         }

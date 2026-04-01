@@ -202,7 +202,7 @@ class Block2Queries:
         return run_query(driver, Block2Queries.CRITICAL_LANES_BY_RISK)
 
     @staticmethod
-    def run_all(driver, 
+    def run_risk_pack(driver, 
                 geo_threshold: float = 0.6,
                 weather_threshold: float = 0.6) -> dict:
         """
