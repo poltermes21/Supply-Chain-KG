@@ -159,7 +159,6 @@ class Block2Queries:
             f.primary_route AS primary_route,
             round(f.primary_route_share_pct, 2) AS primary_route_share_pct
         ORDER BY avg_combined_risk_score DESC, disrupted_rate_pct DESC, shipments DESC
-        LIMIT 15
     """
 
     # EXECUTION METHODS
