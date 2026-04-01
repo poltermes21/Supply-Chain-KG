@@ -87,13 +87,44 @@ class Block2Queries:
             round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
         ORDER BY avg_combined_risk_score DESC
     """
+    
+    # 2.4 OUTBOUND CITY RISK EXPOSURE
+    OUTBOUND_CITY_RISK_EXPOSURE = """
+        MATCH (o:Order)-[:ORIGIN_FROM]->(c:City),
+            (o)-[:HAS_RISK]->(ra:RiskAssessment)
+        RETURN
+            c.id AS city,
+            count(o) AS total_shipments,
+            round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
+            round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
+            round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
+            round(100.0 * avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END), 2) AS disruption_rate_pct,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
+        ORDER BY avg_combined_risk_score DESC
+    """
+    
+    
+    # 2.5 INBOUND CITY RISK EXPOSURE
+    INBOUND_CITY_RISK_EXPOSURE = """
+        MATCH (o:Order)-[:DESTINATION_TO]->(c:City),
+            (o)-[:HAS_RISK]->(ra:RiskAssessment)
+        RETURN
+            c.id AS city,
+            count(o) AS total_shipments,
+            round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
+            round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
+            round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
+            round(100.0 * avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END), 2) AS disruption_rate_pct,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
+        ORDER BY avg_combined_risk_score DESC
+    """
+    
 
-    # 2.4 JOINT HIGH-RISK EXPOSURE
-
-    JOINT_HIGH_RISK_EXPOSURE = """
+    # 2.6 JOINT HIGH-RISK EXPOSURE
+    JOINT_RISK_EXPOSURE = """
         MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
-        WHERE ra.geopolitical_risk_index >= 0.6
-        AND ra.weather_severity_index >= 6
+        WHERE ra.geopolitical_risk_index >= $geo_threshold
+        AND ra.weather_severity_index >= $weather_threshold
         MATCH (o)-[:SHIPPED_VIA]->(r:Route)
         MATCH (o)-[:AFFECTED_BY]->(d:DisruptionType)
 
@@ -114,7 +145,7 @@ class Block2Queries:
         ORDER BY total_shipments DESC
     """
 
-    # 2.5 CRITICAL OD LANES BY RISK
+    # 2.7 CRITICAL OD LANES BY RISK
 
     CRITICAL_LANES_BY_RISK = """
         MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
@@ -144,17 +175,34 @@ class Block2Queries:
     @staticmethod
     def risk_exposure_by_product(driver) -> pd.DataFrame:
         return run_query(driver, Block2Queries.RISK_EXPOSURE_BY_PRODUCT)
+    
+    @staticmethod
+    def inbound_city_risk_exposure(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.INBOUND_CITY_RISK_EXPOSURE)
+    
+    @staticmethod
+    def outbound_city_risk_exposure(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.OUTBOUND_CITY_RISK_EXPOSURE)
 
     @staticmethod
-    def joint_high_risk_exposure(driver) -> pd.DataFrame:
-        return run_query(driver, Block2Queries.JOINT_HIGH_RISK_EXPOSURE)
+    def joint_risk_exposure(driver, 
+                            geo_threshold: float = 0.6,
+                            weather_threshold: float = 0.6) -> pd.DataFrame:
+        return run_query(
+            driver, 
+            Block2Queries.JOINT_RISK_EXPOSURE,
+            geo_threshold=geo_threshold,
+            weather_threshold=weather_threshold
+        )
 
     @staticmethod
     def critical_lanes_by_risk(driver) -> pd.DataFrame:
         return run_query(driver, Block2Queries.CRITICAL_LANES_BY_RISK)
 
     @staticmethod
-    def run_all(driver) -> dict:
+    def run_all(driver, 
+                geo_threshold: float = 0.6,
+                weather_threshold: float = 0.6) -> dict:
         """
         Run all Block 2 queries.
 
@@ -162,9 +210,13 @@ class Block2Queries:
             Dictionary of pandas DataFrames
         """
         return {
-            "risk_level_global":        Block2Queries.risk_level_global(driver),
-            "risk_exposure_by_route":   Block2Queries.risk_exposure_by_route(driver),
-            "risk_exposure_by_product": Block2Queries.risk_exposure_by_product(driver),
-            "joint_high_risk_exposure": Block2Queries.joint_high_risk_exposure(driver),
-            "critical_lanes_by_risk":   Block2Queries.critical_lanes_by_risk(driver),
+            "risk_level_global":            Block2Queries.risk_level_global(driver),
+            "risk_exposure_by_route":       Block2Queries.risk_exposure_by_route(driver),
+            "risk_exposure_by_product":     Block2Queries.risk_exposure_by_product(driver),
+            "inbound_city_risk_exposure":   Block2Queries.inbound_city_risk_exposure(driver),
+            "outbound_city_risk_exposure":  Block2Queries.outbound_city_risk_exposure(driver),
+            "joint_risk_exposure":          Block2Queries.joint_risk_exposure(driver, 
+                                                                              geo_threshold=geo_threshold,
+                                                                              weather_threshold=weather_threshold),
+            "critical_lanes_by_risk":       Block2Queries.critical_lanes_by_risk(driver),
         }
