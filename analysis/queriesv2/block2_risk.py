@@ -29,16 +29,23 @@ class Block2Queries:
         WITH count(o) AS total_orders
 
         MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
-        WITH total_orders,
+        WITH
+            total_orders,
             ra.risk_level AS risk_level,
             count(o) AS total_shipments,
-            avg(ra.combined_risk_score) AS avg_combined_risk_score
+            avg(ra.combined_risk_score) AS avg_combined_risk_score,
+            avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END) AS disruption_rate,
+            avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate,
+            avg(o.delay_days) as avg_delay_days
 
         RETURN
             risk_level,
             total_shipments,
             round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total,
-            round(avg_combined_risk_score, 4) AS avg_combined_risk_score
+            round(avg_combined_risk_score, 4) AS avg_combined_risk_score,
+            round(100.0 * disruption_rate, 2) AS disruption_rate_pct,
+            round(100.0 * delay_rate, 2) AS delay_rate_pct,
+            round(avg_delay_days, 2) as avg_delay_days
         ORDER BY
             CASE risk_level
                 WHEN 'low' THEN 1
@@ -81,27 +88,7 @@ class Block2Queries:
         ORDER BY avg_combined_risk_score DESC
     """
 
-    # 2.4 RISK BUCKETS VS. OUTCOMES
-
-    RISK_BUCKETS_VS_OUTCOME = """
-        MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
-        WITH o,
-            CASE
-                WHEN ra.combined_risk_score < 0.25 THEN '0.00-0.24'
-                WHEN ra.combined_risk_score < 0.50 THEN '0.25-0.49'
-                WHEN ra.combined_risk_score < 0.75 THEN '0.50-0.74'
-                ELSE '0.75-1.00'
-            END AS risk_bucket
-        RETURN
-            risk_bucket,
-            count(o) AS total_shipments,
-            round(100.0 * avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END), 2) AS disruption_rate_pct,
-            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct,
-            round(avg(o.delay_days), 2) AS avg_delay_days
-        ORDER BY risk_bucket
-    """
-
-    # 2.5 JOINT HIGH-RISK EXPOSURE
+    # 2.4 JOINT HIGH-RISK EXPOSURE
 
     JOINT_HIGH_RISK_EXPOSURE = """
         MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
@@ -127,7 +114,7 @@ class Block2Queries:
         ORDER BY total_shipments DESC
     """
 
-    # 2.6 CRITICAL OD LANES BY RISK
+    # 2.5 CRITICAL OD LANES BY RISK
 
     CRITICAL_LANES_BY_RISK = """
         MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
@@ -159,10 +146,6 @@ class Block2Queries:
         return run_query(driver, Block2Queries.RISK_EXPOSURE_BY_PRODUCT)
 
     @staticmethod
-    def risk_buckets_vs_outcome(driver) -> pd.DataFrame:
-        return run_query(driver, Block2Queries.RISK_BUCKETS_VS_OUTCOME)
-
-    @staticmethod
     def joint_high_risk_exposure(driver) -> pd.DataFrame:
         return run_query(driver, Block2Queries.JOINT_HIGH_RISK_EXPOSURE)
 
@@ -182,7 +165,6 @@ class Block2Queries:
             "risk_level_global":        Block2Queries.risk_level_global(driver),
             "risk_exposure_by_route":   Block2Queries.risk_exposure_by_route(driver),
             "risk_exposure_by_product": Block2Queries.risk_exposure_by_product(driver),
-            "risk_buckets_vs_outcome":  Block2Queries.risk_buckets_vs_outcome(driver),
             "joint_high_risk_exposure": Block2Queries.joint_high_risk_exposure(driver),
             "critical_lanes_by_risk":   Block2Queries.critical_lanes_by_risk(driver),
         }
