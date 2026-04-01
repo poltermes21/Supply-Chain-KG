@@ -116,13 +116,23 @@ class DataTransformer:
             self.df['disruption_name'].unique()
         ))
         print(f"  Mapping: {unique_mapping}")
+        
+        
+    def normalize_weather_index(self):
+        """
+        Convert Weather_Severity_Index from 0–10 scale to 0–1 scale.
+        """
+        print("Normalizing Weather_Severity_Index to [0,1]...")
+
+        self.df['Weather_Severity_Index'] = (
+            self.df['Weather_Severity_Index'] / 10.0
+        ).round(4)
     
     # 1. CLASSIFICATION FIELDS
     
     def create_delay_severity(self):
         """
         Categorize Delay_Days into severity levels.
-        
         Thresholds:
             - None: 0 days
             - Minor: 1-3 days
@@ -152,7 +162,7 @@ class DataTransformer:
         Compute combined_risk_score and classify into risk levels.
         
         Formula (weighted average, result normalized to [0, 1]):
-            combined_risk_score = Geopolitical_Risk_Index * 0.6 + (Weather_Severity_Index / 10) * 0.4
+            combined_risk_score = Geopolitical_Risk_Index * 0.6 + Weather_Severity_Index * 0.4
         
         Thresholds:
             - low: combined_risk_score < 0.3
@@ -162,10 +172,8 @@ class DataTransformer:
         """
         print("Creating risk_level classification...")
         
-        weather_normalized = self.df['Weather_Severity_Index'] / 10.0
         self.df['combined_risk_score'] = (
-            self.df['Geopolitical_Risk_Index'] * 0.6 + 
-            weather_normalized * 0.4
+            self.df['Geopolitical_Risk_Index'] * 0.6 + self.df['Weather_Severity_Index'] * 0.4
         ).round(4)
         
         conditions = [
@@ -431,8 +439,10 @@ class DataTransformer:
         original_cols = len(self.df.columns)
         
         print("\n--- STEP 0: ID NORMALIZATION ---")
-        self.create_numeric_ids()  # Create numeric IDs first
+        self.create_numeric_ids() 
         self.create_disruption_name()
+        self.normalize_weather_index()
+        
         
         print("\n--- STEP 1: CLASSIFICATION FIELDS ---")
         self.create_delay_severity()
