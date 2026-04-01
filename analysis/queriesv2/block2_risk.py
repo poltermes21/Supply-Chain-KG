@@ -89,6 +89,7 @@ class Block2Queries:
     """
     
     # 2.4 OUTBOUND CITY RISK EXPOSURE
+    
     OUTBOUND_CITY_RISK_EXPOSURE = """
         MATCH (o:Order)-[:ORIGIN_FROM]->(c:City),
             (o)-[:HAS_RISK]->(ra:RiskAssessment)
@@ -105,6 +106,7 @@ class Block2Queries:
     
     
     # 2.5 INBOUND CITY RISK EXPOSURE
+    
     INBOUND_CITY_RISK_EXPOSURE = """
         MATCH (o:Order)-[:DESTINATION_TO]->(c:City),
             (o)-[:HAS_RISK]->(ra:RiskAssessment)
@@ -120,7 +122,8 @@ class Block2Queries:
     """
     
 
-    # 2.6 JOINT HIGH-RISK EXPOSURE
+    # 2.6 JOINT RISK EXPOSURE
+    
     JOINT_RISK_EXPOSURE = """
         MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
         WHERE ra.geopolitical_risk_index >= $geo_threshold
