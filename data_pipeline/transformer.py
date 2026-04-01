@@ -44,6 +44,7 @@ class DataTransformer:
             'Port Congestion' -> 'port_congestion'
             'Geopolitical Conflict (Route Diversion)' -> 'geopolitical_conflict'
             'Severe Weather (Typhoon/Storm)' -> 'severe_weather'
+            'Severe Weather (Cape Storms)' -> 'severe_weather'
         """
         value = re.sub(r'\(.*?\)', '', value)
         value = value.lower().strip()
