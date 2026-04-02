@@ -87,9 +87,17 @@ class Block5Queries:
             d.full_name AS disruption_type,
             ma.name AS mitigation_action,
             count(o) AS total_cases,
+            sum(CASE WHEN o.mitigation_effectiveness = 'fully_effective' THEN 1 ELSE 0 END) AS fully_effective,
+            sum(CASE WHEN o.mitigation_effectiveness = 'partially_effective' THEN 1 ELSE 0 END) AS partially_effective,
+            sum(CASE WHEN o.mitigation_effectiveness = 'not_effective' THEN 1 ELSE 0 END) AS not_effective,
             round(avg(o.delay_days), 2) AS residual_delay_days,
             round(avg(o.cost_premium), 2) AS avg_cost_premium_pct,
-            round(100.0 * avg(CASE WHEN o.mitigation_effective THEN 1.0 ELSE 0.0 END), 2) AS effectiveness_rate_pct
+            round(100.0 * avg(CASE WHEN o.mitigation_effective THEN 1.0 ELSE 0.0 END), 2) AS effectiveness_rate_pct,
+            round(
+                100.0 *
+                avg(CASE WHEN o.actual_lead_time_days <= o.scheduled_lead_time_days THEN 1.0 ELSE 0.0 END),
+                2
+            ) AS recovered_within_schedule_pct
         ORDER BY disruption_type, effectiveness_rate_pct DESC, residual_delay_days ASC
     """
 
@@ -107,18 +115,26 @@ class Block5Queries:
             ma.name AS mitigation_action,
             ra.risk_level AS risk_level,
             count(o) AS total_cases,
+            sum(CASE WHEN o.mitigation_effectiveness = 'fully_effective' THEN 1 ELSE 0 END) AS fully_effective,
+            sum(CASE WHEN o.mitigation_effectiveness = 'partially_effective' THEN 1 ELSE 0 END) AS partially_effective,
+            sum(CASE WHEN o.mitigation_effectiveness = 'not_effective' THEN 1 ELSE 0 END) AS not_effective,
             avg(o.delay_days) AS residual_delay_days,
             avg(o.cost_premium) AS avg_cost_premium_pct,
-            avg(CASE WHEN o.mitigation_effective THEN 1.0 ELSE 0.0 END) AS effectiveness_rate
+            avg(CASE WHEN o.mitigation_effective THEN 1.0 ELSE 0.0 END) AS effectiveness_rate,
+            avg(CASE WHEN o.actual_lead_time_days <= o.scheduled_lead_time_days THEN 1.0 ELSE 0.0 END) as recovered_within_schedule_rate
         RETURN
             disruption_type,
             route,
             risk_level,
             mitigation_action,
             total_cases,
+            fully_effective,
+            partially_effective,
+            not_effective,
             round(residual_delay_days, 2) AS residual_delay_days,
             round(avg_cost_premium_pct, 2) AS avg_cost_premium_pct,
-            round(100.0 * effectiveness_rate, 2) AS effectiveness_rate_pct
+            round(100.0 * effectiveness_rate, 2) AS effectiveness_rate_pct,
+            round(100.0 * recovered_within_schedule_rate, 2) as recovered_within_schedule_pct
         ORDER BY disruption_type, route, risk_level, effectiveness_rate_pct DESC
     """
 

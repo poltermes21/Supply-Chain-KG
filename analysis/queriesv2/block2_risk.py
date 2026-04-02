@@ -29,16 +29,23 @@ class Block2Queries:
         WITH count(o) AS total_orders
 
         MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
-        WITH total_orders,
+        WITH
+            total_orders,
             ra.risk_level AS risk_level,
             count(o) AS total_shipments,
-            avg(ra.combined_risk_score) AS avg_combined_risk_score
+            avg(ra.combined_risk_score) AS avg_combined_risk_score,
+            avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END) AS disruption_rate,
+            avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate,
+            avg(o.delay_days) as avg_delay_days
 
         RETURN
             risk_level,
             total_shipments,
             round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total,
-            round(avg_combined_risk_score, 4) AS avg_combined_risk_score
+            round(avg_combined_risk_score, 4) AS avg_combined_risk_score,
+            round(100.0 * disruption_rate, 2) AS disruption_rate_pct,
+            round(100.0 * delay_rate, 2) AS delay_rate_pct,
+            round(avg_delay_days, 2) as avg_delay_days
         ORDER BY
             CASE risk_level
                 WHEN 'low' THEN 1
@@ -80,33 +87,47 @@ class Block2Queries:
             round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
         ORDER BY avg_combined_risk_score DESC
     """
-
-    # 2.4 RISK BUCKETS VS. OUTCOMES
-
-    RISK_BUCKETS_VS_OUTCOME = """
-        MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
-        WITH o,
-            CASE
-                WHEN ra.combined_risk_score < 0.25 THEN '0.00-0.24'
-                WHEN ra.combined_risk_score < 0.50 THEN '0.25-0.49'
-                WHEN ra.combined_risk_score < 0.75 THEN '0.50-0.74'
-                ELSE '0.75-1.00'
-            END AS risk_bucket
+    
+    # 2.4 OUTBOUND CITY RISK EXPOSURE
+    
+    OUTBOUND_CITY_RISK_EXPOSURE = """
+        MATCH (o:Order)-[:ORIGIN_FROM]->(c:City),
+            (o)-[:HAS_RISK]->(ra:RiskAssessment)
         RETURN
-            risk_bucket,
+            c.id AS city,
             count(o) AS total_shipments,
+            round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
+            round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
+            round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
             round(100.0 * avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END), 2) AS disruption_rate_pct,
-            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct,
-            round(avg(o.delay_days), 2) AS avg_delay_days
-        ORDER BY risk_bucket
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
+        ORDER BY avg_combined_risk_score DESC
     """
+    
+    
+    # 2.5 INBOUND CITY RISK EXPOSURE
+    
+    INBOUND_CITY_RISK_EXPOSURE = """
+        MATCH (o:Order)-[:DESTINATION_TO]->(c:City),
+            (o)-[:HAS_RISK]->(ra:RiskAssessment)
+        RETURN
+            c.id AS city,
+            count(o) AS total_shipments,
+            round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
+            round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
+            round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
+            round(100.0 * avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END), 2) AS disruption_rate_pct,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
+        ORDER BY avg_combined_risk_score DESC
+    """
+    
 
-    # 2.5 JOINT HIGH-RISK EXPOSURE
-
-    JOINT_HIGH_RISK_EXPOSURE = """
+    # 2.6 JOINT RISK EXPOSURE
+    
+    JOINT_RISK_EXPOSURE = """
         MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
-        WHERE ra.geopolitical_risk_index >= 0.6
-        AND ra.weather_severity_index >= 6
+        WHERE ra.geopolitical_risk_index >= $geo_threshold
+        AND ra.weather_severity_index >= $weather_threshold
         MATCH (o)-[:SHIPPED_VIA]->(r:Route)
         MATCH (o)-[:AFFECTED_BY]->(d:DisruptionType)
 
@@ -127,7 +148,7 @@ class Block2Queries:
         ORDER BY total_shipments DESC
     """
 
-    # 2.6 CRITICAL OD LANES BY RISK
+    # 2.7 CRITICAL OD LANES BY RISK
 
     CRITICAL_LANES_BY_RISK = """
         MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
@@ -141,7 +162,6 @@ class Block2Queries:
             f.primary_route AS primary_route,
             round(f.primary_route_share_pct, 2) AS primary_route_share_pct
         ORDER BY avg_combined_risk_score DESC, disrupted_rate_pct DESC, shipments DESC
-        LIMIT 15
     """
 
     # EXECUTION METHODS
@@ -157,21 +177,34 @@ class Block2Queries:
     @staticmethod
     def risk_exposure_by_product(driver) -> pd.DataFrame:
         return run_query(driver, Block2Queries.RISK_EXPOSURE_BY_PRODUCT)
+    
+    @staticmethod
+    def inbound_city_risk_exposure(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.INBOUND_CITY_RISK_EXPOSURE)
+    
+    @staticmethod
+    def outbound_city_risk_exposure(driver) -> pd.DataFrame:
+        return run_query(driver, Block2Queries.OUTBOUND_CITY_RISK_EXPOSURE)
 
     @staticmethod
-    def risk_buckets_vs_outcome(driver) -> pd.DataFrame:
-        return run_query(driver, Block2Queries.RISK_BUCKETS_VS_OUTCOME)
-
-    @staticmethod
-    def joint_high_risk_exposure(driver) -> pd.DataFrame:
-        return run_query(driver, Block2Queries.JOINT_HIGH_RISK_EXPOSURE)
+    def joint_risk_exposure(driver, 
+                            geo_threshold: float = 0.6,
+                            weather_threshold: float = 0.6) -> pd.DataFrame:
+        return run_query(
+            driver, 
+            Block2Queries.JOINT_RISK_EXPOSURE,
+            geo_threshold=geo_threshold,
+            weather_threshold=weather_threshold
+        )
 
     @staticmethod
     def critical_lanes_by_risk(driver) -> pd.DataFrame:
         return run_query(driver, Block2Queries.CRITICAL_LANES_BY_RISK)
 
     @staticmethod
-    def run_all(driver) -> dict:
+    def run_risk_pack(driver, 
+                geo_threshold: float = 0.6,
+                weather_threshold: float = 0.6) -> dict:
         """
         Run all Block 2 queries.
 
@@ -179,10 +212,13 @@ class Block2Queries:
             Dictionary of pandas DataFrames
         """
         return {
-            "risk_level_global":        Block2Queries.risk_level_global(driver),
-            "risk_exposure_by_route":   Block2Queries.risk_exposure_by_route(driver),
-            "risk_exposure_by_product": Block2Queries.risk_exposure_by_product(driver),
-            "risk_buckets_vs_outcome":  Block2Queries.risk_buckets_vs_outcome(driver),
-            "joint_high_risk_exposure": Block2Queries.joint_high_risk_exposure(driver),
-            "critical_lanes_by_risk":   Block2Queries.critical_lanes_by_risk(driver),
+            "risk_level_global":            Block2Queries.risk_level_global(driver),
+            "risk_exposure_by_route":       Block2Queries.risk_exposure_by_route(driver),
+            "risk_exposure_by_product":     Block2Queries.risk_exposure_by_product(driver),
+            "inbound_city_risk_exposure":   Block2Queries.inbound_city_risk_exposure(driver),
+            "outbound_city_risk_exposure":  Block2Queries.outbound_city_risk_exposure(driver),
+            "joint_risk_exposure":          Block2Queries.joint_risk_exposure(driver, 
+                                                                              geo_threshold=geo_threshold,
+                                                                              weather_threshold=weather_threshold),
+            "critical_lanes_by_risk":       Block2Queries.critical_lanes_by_risk(driver),
         }
