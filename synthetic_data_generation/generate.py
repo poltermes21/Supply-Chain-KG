@@ -161,14 +161,8 @@ def assign_times(route: str, mode: str, disruption: str) -> tuple:
     """
     cfg     = LEAD_TIME[route][mode]
     base_lt = int(rng.integers(cfg["base"][0], cfg["base"][1] + 1))
-
-    # Scheduled: base + operational friction only. Stable, not disruption-aware.
-    sched = int(round(base_lt * (1 + cfg["buffer"])))
-
-    # Mitigation decided before computing actual (affects real outcome)
     mitigation = assign_mitigation(disruption)
 
-    # Actual: base + stochastic disruption effect
     d_cfg = DELAY_BY_DISRUPTION[disruption]
     if d_cfg["mean"] == 0:
         real_extra = max(0, int(round(rng.normal(0, d_cfg["std"]))))
@@ -177,15 +171,21 @@ def assign_times(route: str, mode: str, disruption: str) -> tuple:
             rng.normal(d_cfg["mean"], d_cfg["std"]), 0, d_cfg["max"]
         ))
 
-    # Mitigation reduces the real disruption effect
     if real_extra > 0 and mitigation != "Standard Shipping":
         reduction  = MITIGATION_REDUCTION[mitigation]
         real_extra = max(0, int(round(real_extra * (1 - reduction))))
 
     actual = base_lt + real_extra
 
-    # Delay = deviation from plan. Buffer absorbs small disruptions.
-    # Large disruptions (Geopolitical: mean 14d) exceed any reasonable buffer.
+    # scheduled: petit buffer operatiu + anticipació parcial de la disrupció
+    # Els dos conceptes sumen perquè representen coses diferents:
+    # buffer → friction normal sempre present
+    # anticipació → replanificació específica quan es coneix la disrupció
+    ant           = ANTICIPATION_FACTOR[disruption]
+    buffer_days   = base_lt * cfg["buffer"]          # petit (5-10%)
+    expected_days = d_cfg["mean"] * ant               # disruption-specific
+    sched = int(round(base_lt + buffer_days + expected_days))
+
     delay  = max(0, actual - sched)
     status = "Late" if delay > 0 else "On Time"
     return base_lt, sched, actual, delay, mitigation, status
