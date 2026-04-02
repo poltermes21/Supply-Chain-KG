@@ -46,10 +46,21 @@ class DataTransformer:
             'Severe Weather (Typhoon/Storm)' -> 'severe_weather'
             'Severe Weather (Cape Storms)' -> 'severe_weather'
         """
-        value = re.sub(r'\(.*?\)', '', value)
+        
+        # Special case: Severe Weather
+        if value.lower().startswith('severe weather'):
+            match = re.search(r'\((.*?)\)', value)
+            if match:
+                value = match.group(1)
+        else:
+            # Default behavior: remove parentheses
+            value = re.sub(r'\(.*?\)', '', value)
+
+        # Normalize to snake_case
         value = value.lower().strip()
-        value = re.sub(r'[\s_]+', '_', value)
-        value = value.strip('_')
+        value = re.sub(r'[\/\s]+', '_', value)
+        value = re.sub(r'[^a-z0-9_]', '', value)
+        value = re.sub(r'_+', '_', value).strip('_')
         return value
     
     def create_numeric_ids(self):
