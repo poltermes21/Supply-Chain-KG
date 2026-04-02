@@ -146,37 +146,49 @@ def assign_disruption(route: str, mode: str, risk_level: str) -> str:
 
 # STEP 8: ASSIGN LEAD TIMES AND DELAY
 
-def assign_times(route: str, mode: str, disruption: str,
-                 mitigation: str) -> tuple:
+def assign_times(route: str, mode: str, disruption: str) -> tuple:
     """
-    Compute base, scheduled, actual lead times and delay days.
+    Clean separation of concerns:
 
-    base_lead_time       : sampled uniformly within the route+mode range
-    scheduled_lead_time  : base × (1 + buffer_pct)  — operational planning buffer
-    delay                : sampled from disruption-specific distribution,
-                           then reduced by mitigation effectiveness
-    actual_lead_time     : base + delay_after_mitigation
+    base_lt   : deterministic geography (sampled once from route range)
+    sched     : base + small operational friction buffer only
+                Does NOT include any disruption anticipation.
+                Represents what a planner would schedule in normal conditions.
+    actual    : base + stochastic disruption effect
+                All uncertainty lives here. Disruption is the main driver.
+    delay     : max(0, actual - sched)
+                Positive when disruption pushes actual beyond the friction buffer.
     """
     cfg     = LEAD_TIME[route][mode]
     base_lt = int(rng.integers(cfg["base"][0], cfg["base"][1] + 1))
-    sched   = int(round(base_lt * (1 + cfg["buffer"])))
 
+    # Scheduled: base + operational friction only. Stable, not disruption-aware.
+    sched = int(round(base_lt * (1 + cfg["buffer"])))
+
+    # Mitigation decided before computing actual (affects real outcome)
+    mitigation = assign_mitigation(disruption)
+
+    # Actual: base + stochastic disruption effect
     d_cfg = DELAY_BY_DISRUPTION[disruption]
     if d_cfg["mean"] == 0:
-        delay = max(0, int(round(rng.normal(0, d_cfg["std"]))))
+        real_extra = max(0, int(round(rng.normal(0, d_cfg["std"]))))
     else:
-        delay = int(np.clip(rng.normal(d_cfg["mean"], d_cfg["std"]),
-                            0, d_cfg["max"]))
+        real_extra = int(np.clip(
+            rng.normal(d_cfg["mean"], d_cfg["std"]), 0, d_cfg["max"]
+        ))
 
-    # Apply mitigation reduction
-    if delay > 0 and mitigation != "Standard Shipping":
-        reduction = MITIGATION_REDUCTION[mitigation]
-        delay     = max(0, int(round(delay * (1 - reduction))))
+    # Mitigation reduces the real disruption effect
+    if real_extra > 0 and mitigation != "Standard Shipping":
+        reduction  = MITIGATION_REDUCTION[mitigation]
+        real_extra = max(0, int(round(real_extra * (1 - reduction))))
 
-    actual = base_lt + delay
+    actual = base_lt + real_extra
+
+    # Delay = deviation from plan. Buffer absorbs small disruptions.
+    # Large disruptions (Geopolitical: mean 14d) exceed any reasonable buffer.
+    delay  = max(0, actual - sched)
     status = "Late" if delay > 0 else "On Time"
-    return base_lt, sched, actual, delay, status
-
+    return base_lt, sched, actual, delay, mitigation, status
 
 # STEP 9: ASSIGN MITIGATION
 
@@ -240,11 +252,11 @@ def generate_dataset(n: int = N_ORDERS) -> pd.DataFrame:
 
         geo, weather, infl, combined, risk_level = assign_risk(route)
         disruption = assign_disruption(route, mode, risk_level)
-        mitigation = assign_mitigation(disruption)
 
-        base_lt, sched_lt, actual_lt, delay, status = assign_times(
-            route, mode, disruption, mitigation
+        base_lt, sched_lt, actual_lt, delay, mitigation, status = assign_times(
+            route, mode, disruption
         )
+        
         cost = assign_cost(route, mode, product, weight_kg, mitigation)
 
         order_date = str(pd.Timestamp(rng.choice(dates)).date())

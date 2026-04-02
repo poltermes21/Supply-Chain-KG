@@ -63,24 +63,24 @@ OD_WEIGHTS = {
 # ── LEAD TIMES ────────────────────────────────────────────────────────────────
 LEAD_TIME = {
     "Intra-Asia": {
-        "Sea": {"base": (5,  14), "buffer": 0.15},
-        "Air": {"base": (1,   2), "buffer": 0.10},
+        "Sea": {"base": (5,  14), "buffer": 0.05},
+        "Air": {"base": (1,   2), "buffer": 0.00},
     },
     "Atlantic": {
-        "Sea": {"base": (8,  18), "buffer": 0.18},
-        "Air": {"base": (1,   3), "buffer": 0.10},
+        "Sea": {"base": (8,  18), "buffer": 0.07},
+        "Air": {"base": (1,   3), "buffer": 0.00},
     },
     "Pacific": {
-        "Sea": {"base": (14, 24), "buffer": 0.20},
-        "Air": {"base": (2,   4), "buffer": 0.12},
+        "Sea": {"base": (14, 24), "buffer": 0.08},
+        "Air": {"base": (2,   4), "buffer": 0.00},
     },
     "Suez": {
-        "Sea": {"base": (18, 32), "buffer": 0.22},
-        "Air": {"base": (2,   4), "buffer": 0.12},
+        "Sea": {"base": (18, 32), "buffer": 0.10},
+        "Air": {"base": (2,   4), "buffer": 0.00},
     },
     "CoGH": {
-        "Sea": {"base": (25, 45), "buffer": 0.25},
-        "Air": {"base": (3,   5), "buffer": 0.15},
+        "Sea": {"base": (25, 45), "buffer": 0.08},
+        "Air": {"base": (3,   5), "buffer": 0.00},
     },
 }
 
@@ -138,6 +138,14 @@ DISRUPTION_TYPES = {
         "Severe Weather (Cape Storms)": 0.55,
         "Port Congestion":              0.45,
     },
+}
+
+ANTICIPATION_FACTOR = {
+    "No_Disruption":                           0.0,
+    "Port Congestion":                         0.70,
+    "Severe Weather (Typhoon/Storm)":          0.50,
+    "Severe Weather (Cape Storms)":            0.50,
+    "Geopolitical Conflict (Route Diversion)": 0.10,
 }
 
 RISK_DISRUPTION_MULTIPLIER = {
