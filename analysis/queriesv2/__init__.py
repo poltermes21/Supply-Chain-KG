@@ -16,11 +16,11 @@ Punt d'entrada centralitzat per a totes les consultes d'anàlisi.
 from analysis.queriesv2.base import get_driver, run_query
 
 from analysis.queriesv2.block1_operational import Block1Queries
-from analysis.queriesv2.block2_operational import Block2Queries
-from analysis.queriesv2.block3_operational import Block3Queries
-from analysis.queriesv2.block4_operational import Block4Queries
-from analysis.queriesv2.block5_operational import Block5Queries
-from analysis.queriesv2.block6_operational import Block6Queries
+from analysis.queriesv2.block2_risk import Block2Queries
+from analysis.queriesv2.block3_vulnerability import Block3Queries
+from analysis.queriesv2.block4_geography import Block4Queries
+from analysis.queriesv2.block5_costs import Block5Queries
+from analysis.queriesv2.block6_what_if import Block6Queries
 
 
 __all__ = [

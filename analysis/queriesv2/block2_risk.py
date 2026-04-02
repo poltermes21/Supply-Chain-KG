@@ -187,14 +187,14 @@ class Block2Queries:
         return run_query(driver, Block2Queries.OUTBOUND_CITY_RISK_EXPOSURE)
 
     @staticmethod
-    def joint_risk_exposure(driver, 
-                            geo_threshold: float = 0.6,
-                            weather_threshold: float = 0.6) -> pd.DataFrame:
+    def joint_risk_exposure(driver, geo_threshold: float, weather_threshold: float) -> pd.DataFrame:
         return run_query(
             driver, 
             Block2Queries.JOINT_RISK_EXPOSURE,
-            geo_threshold=geo_threshold,
-            weather_threshold=weather_threshold
+            params={
+                "geo_threshold": geo_threshold,
+                "weather_threshold": weather_threshold
+            }
         )
 
     @staticmethod

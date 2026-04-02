@@ -100,32 +100,33 @@ class Block4Queries:
             MATCH (:City)-[f:CITY_FLOW]->(:City)
             RETURN sum(f.shipments) AS network_shipments
         }
+
         MATCH (c:City)-[:LOCATED_IN]->(cn:Country)
+
         CALL {
             WITH c
             OPTIONAL MATCH (c)-[out:CITY_FLOW]->()
-            RETURN coalesce(sum(out.shipments), 0) AS outbound_shipments
+            RETURN sum(out.shipments) AS outbound
         }
+
         CALL {
             WITH c
             OPTIONAL MATCH ()-[inc:CITY_FLOW]->(c)
-            RETURN coalesce(sum(inc.shipments), 0) AS inbound_shipments
+            RETURN sum(inc.shipments) AS inbound
         }
-        WITH network_shipments, cn,
-            sum(outbound_shipments) AS outbound_shipments,
-            sum(inbound_shipments) AS inbound_shipments
+
+        WITH cn, network_shipments,
+            sum(outbound) AS outbound,
+            sum(inbound) AS inbound
 
         RETURN
             cn.country_name AS country,
             cn.region AS region,
-            outbound_shipments,
-            inbound_shipments,
-            outbound_shipments + inbound_shipments AS total_incident_traffic,
-            round(
-                100.0 * (outbound_shipments + inbound_shipments) / toFloat(network_shipments),
-                2
-            ) AS pct_total_orders_touched
-        ORDER BY total_incident_traffic DESC
+            outbound,
+            inbound,
+            round(100.0 * outbound / network_shipments, 2) AS pct_outbound,
+            round(100.0 * inbound / network_shipments, 2) AS pct_inbound
+        ORDER BY (outbound + inbound) DESC
     """
 
     # EXECUTION HELPERS

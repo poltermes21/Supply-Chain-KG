@@ -156,10 +156,10 @@ class DataTransformer:
         
         conditions = [
             self.df['Delay_Days'] == 0,
-            self.df['Delay_Days'] <= 3,
+            self.df['Delay_Days'] <= 2,
+            self.df['Delay_Days'] <= 4,
             self.df['Delay_Days'] <= 7,
-            self.df['Delay_Days'] <= 14,
-            self.df['Delay_Days'] > 14
+            self.df['Delay_Days'] > 7
         ]
         choices = ['none', 'minor', 'moderate', 'severe', 'critical']
         
