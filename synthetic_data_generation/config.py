@@ -94,7 +94,7 @@ DELAY_BY_DISRUPTION = {
 
 MITIGATION_REDUCTION = {
     "Standard Shipping":     0.00,
-    "Re-routing":            0.35,
+    "Re-routing":            0.25,
     "Expedited Air Freight": 0.55,
 }
 
@@ -255,7 +255,7 @@ MITIGATION_BY_DISRUPTION = {
         "Standard Shipping": 1.00,
     },
     "Port Congestion": {
-        "Standard Shipping":     0.55,
+        "Standard Shipping":     0.60,
         "Re-routing":            0.25,
         "Expedited Air Freight": 0.15,
         

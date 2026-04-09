@@ -49,51 +49,26 @@ class Block4Queries:
             }
         )
     """
+    
+    # 4.1 CITY FLOW EXPOSURE
 
-    # 4.1 WRITE LOUVAIN COMMUNITY ID BACK TO CITY NODES
-
-    LOUVAIN_WRITE_COMMUNITY_ID = """
-        CALL gds.louvain.write('city_flow_undirected', {
-            relationshipWeightProperty: 'shipments',
-            writeProperty: 'community_id'
-        })
-        YIELD communityCount, modularity, nodePropertiesWritten
-        RETURN
-            communityCount,
-            round(modularity, 4) AS modularity_score,
-            nodePropertiesWritten
-    """
-
-    # 4.2 COMMUNITY MEMBERSHIP BY CITY
-
-    COMMUNITIES_BY_CITY = """
+    COUNTRY_FLOW_EXPOSURE = """
         MATCH (c:City)
-        WHERE c.community_id IS NOT NULL
-        RETURN
-            c.community_id AS community_id,
-            c.id AS city
-        ORDER BY community_id, city
+        WITH 
+            c.id AS city,
+            c.outbound_degree AS outbound,
+            c.inbound_degree as inbound,
+            (c.outbound_degree + c.inbound_degree) AS total
+
+        RETURN 
+            city,
+            outbound,
+            inbound,
+            total
+        ORDER BY total DESC
     """
-
-    # 4.3 INTER-COMMUNITY FLOWS
-
-    INTER_COMMUNITY_FLOWS = """
-        MATCH (a:City)-[f:CITY_FLOW]->(b:City)
-        WHERE a.community_id IS NOT NULL
-        AND b.community_id IS NOT NULL
-        AND a.community_id <> b.community_id
-        RETURN
-            a.id AS from_city,
-            b.id AS to_city,
-            a.community_id AS from_community,
-            b.community_id AS to_community,
-            f.shipments AS shipments,
-            f.primary_route AS primary_route,
-            round(f.avg_lead_time_days, 2) AS avg_lead_time_days
-        ORDER BY shipments DESC
-    """
-
-    # 4.4 COUNTRY FLOW EXPOSURE
+    
+    # 4.2 COUNTRY FLOW EXPOSURE
 
     COUNTRY_FLOW_EXPOSURE = """
         CALL {
@@ -129,6 +104,49 @@ class Block4Queries:
         ORDER BY (outbound + inbound) DESC
     """
 
+    # 4.3 WRITE LOUVAIN COMMUNITY ID BACK TO CITY NODES
+
+    LOUVAIN_WRITE_COMMUNITY_ID = """
+        CALL gds.louvain.write('city_flow_undirected', {
+            relationshipWeightProperty: 'shipments',
+            writeProperty: 'community_id'
+        })
+        YIELD communityCount, modularity, nodePropertiesWritten
+        RETURN
+            communityCount,
+            round(modularity, 4) AS modularity_score,
+            nodePropertiesWritten
+    """
+
+    # 4.4 COMMUNITY MEMBERSHIP BY CITY
+
+    COMMUNITIES_BY_CITY = """
+        MATCH (c:City)
+        WHERE c.community_id IS NOT NULL
+        RETURN
+            c.community_id AS community_id,
+            c.id AS city
+        ORDER BY community_id, city
+    """
+
+    # 4.5 INTER-COMMUNITY FLOWS
+
+    INTER_COMMUNITY_FLOWS = """
+        MATCH (a:City)-[f:CITY_FLOW]->(b:City)
+        WHERE a.community_id IS NOT NULL
+        AND b.community_id IS NOT NULL
+        AND a.community_id <> b.community_id
+        RETURN
+            a.id AS from_city,
+            b.id AS to_city,
+            a.community_id AS from_community,
+            b.community_id AS to_community,
+            f.shipments AS shipments,
+            f.primary_route AS primary_route,
+            round(f.avg_lead_time_days, 2) AS avg_lead_time_days
+        ORDER BY shipments DESC
+    """
+
     # EXECUTION HELPERS
 
     @staticmethod
@@ -158,6 +176,14 @@ class Block4Queries:
         return df
 
     # EXECUTION METHODS
+    
+    @staticmethod
+    def city_flow_exposure(driver) -> pd.DataFrame:
+        return run_query(driver, Block4Queries.CITY_FLOW_EXPOSURE)
+    
+    @staticmethod
+    def country_flow_exposure(driver) -> pd.DataFrame:
+        return run_query(driver, Block4Queries.COUNTRY_FLOW_EXPOSURE)
 
     @staticmethod
     def write_community_id(driver) -> pd.DataFrame:
@@ -181,10 +207,6 @@ class Block4Queries:
         return run_query(driver, Block4Queries.INTER_COMMUNITY_FLOWS)
 
     @staticmethod
-    def country_flow_exposure(driver) -> pd.DataFrame:
-        return run_query(driver, Block4Queries.COUNTRY_FLOW_EXPOSURE)
-
-    @staticmethod
     def run_all(driver) -> dict:
         """
         Run all Block 4 queries.
@@ -196,8 +218,10 @@ class Block4Queries:
         louvain_stats = Block4Queries.write_community_id(driver)
 
         return {
+            "city_flow_exposure": Block4Queries.city_flow_exposure(driver),
+            "country_flow_exposure": Block4Queries.country_flow_exposure(driver),
             "louvain_write_stats":   louvain_stats,
             "communities_by_city":   Block4Queries.communities_by_city(driver),
-            "inter_community_flows": Block4Queries.inter_community_flows(driver),
-            "country_flow_exposure": Block4Queries.country_flow_exposure(driver)
+            "inter_community_flows": Block4Queries.inter_community_flows(driver)
+            
         }
