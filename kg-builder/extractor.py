@@ -46,7 +46,7 @@ class KGExtractor:
             'Shipping_Cost_USD', 'Order_Weight_Kg',
             'Delivery_Status', 'cost_category',
             'is_delayed', 'is_disrupted',
-            'delay_severity', 'lead_time_efficiency',
+            'delay_severity', 'lead_time_deviation_pct',
             'cost_per_kg', 'delay_ratio', 'cost_premium',
             'mitigation_effectiveness', 'mitigation_effective'
         ]
@@ -67,7 +67,7 @@ class KGExtractor:
                 'is_delayed':               bool(row['is_delayed']),
                 'is_disrupted':             bool(row['is_disrupted']),
                 'delay_severity':           row['delay_severity'],
-                'lead_time_efficiency':     round(float(row['lead_time_efficiency']), 2),
+                'lead_time_deviation_pct':  round(float(row['lead_time_deviation_pct']), 2),
                 'cost_per_kg':              round(float(row['cost_per_kg']), 2),
                 'delay_ratio':              round(float(row['delay_ratio']), 2),
                 'cost_premium':             round(float(row['cost_premium']), 2),

@@ -274,15 +274,15 @@ class DataTransformer:
         Create efficiency and performance metrics for Order nodes.
         
         Metrics created:
-            - lead_time_efficiency (%): (Scheduled - Actual) / Scheduled * 100
+            - lead_time_deviation_pct (%): (Scheduled - Actual) / Scheduled * 100
             - cost_per_kg (USD/kg): Shipping_Cost_USD / Order_Weight_Kg
             - delay_ratio (%): Delay_Days / Scheduled_Lead_Time_Days * 100
         """
         print("Creating efficiency metrics...")
         
-        self.df['lead_time_efficiency'] = (
-            (self.df['Scheduled_Lead_Time_Days'] - self.df['Actual_Lead_Time_Days']) / 
-            self.df['Scheduled_Lead_Time_Days'] * 100
+        self.df['lead_time_deviation_pct'] = (
+            (self.df['Actual_Lead_Time_Days'] - self.df['Scheduled_Lead_Time_Days']) / 
+            self.df['Actual_Lead_Time_Days'] * 100
         ).round(2)
         
         self.df['cost_per_kg'] = (
@@ -293,7 +293,7 @@ class DataTransformer:
             self.df['Delay_Days'] / self.df['Scheduled_Lead_Time_Days'] * 100
         ).round(2)
         
-        print(f"  lead_time_efficiency: mean={self.df['lead_time_efficiency'].mean():.2f}%")
+        print(f"  lead_time_deviation_pct: mean={self.df['lead_time_deviation_pct'].mean():.2f}%")
         print(f"  cost_per_kg: mean=${self.df['cost_per_kg'].mean():.2f}")
         print(f"  delay_ratio: mean={self.df['delay_ratio'].mean():.2f}%")
     
@@ -439,7 +439,7 @@ class DataTransformer:
             0. ID normalization (numeric IDs + disruption_name)
             1. Classification fields (delay_severity, risk_level, cost_category)
             2. Boolean flags (is_disrupted, is_delayed)
-            3. Efficiency metrics (lead_time_efficiency, cost_per_kg, delay_ratio)
+            3. Efficiency metrics (lead_time_deviation_pct, cost_per_kg, delay_ratio)
             4. Resilience metrics (mitigation_effective, cost_premium, route_segment)
             5. Risk assessment ID (assessment_id)
             6. Entity validation (presence and null check for all KG node columns)
@@ -528,7 +528,7 @@ class DataTransformer:
             'is_disrupted',
             'is_delayed',
             # Efficiency metrics
-            'lead_time_efficiency',
+            'lead_time_deviation_pct',
             'cost_per_kg',
             'delay_ratio',
             # Resilience metrics

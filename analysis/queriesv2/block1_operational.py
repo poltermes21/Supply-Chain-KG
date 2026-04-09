@@ -35,7 +35,7 @@ class Block1Queries:
             round(percentileCont(o.actual_lead_time_days, 0.95), 2) AS p95_actual_lead_time_days,
             round(avg(o.shipping_cost_usd), 2) AS avg_shipping_cost_usd,
             round(percentileCont(o.shipping_cost_usd, 0.95), 2) AS p95_shipping_cost_usd,
-            round(avg(o.lead_time_efficiency), 2) AS avg_lead_time_efficiency,
+            round(avg(o.lead_time_deviation_pct), 2) AS avg_lead_time_deviation_pct,
             round(avg(o.cost_per_kg), 2) AS avg_cost_per_kg
     """
 
