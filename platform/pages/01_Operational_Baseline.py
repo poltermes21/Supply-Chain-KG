@@ -209,6 +209,10 @@ df_product   = data["shipments_by_product"]
 df_prod_dist = data["product_distribution"]
 df_severity  = data["delay_severity_distribution"]
 df_od        = data["od_redundancy_profile"]
+df_temporal  = data["temporal_trend"].copy()
+df_temporal["date"] = pd.to_datetime(
+    df_temporal["year"].astype(str) + "-" + df_temporal["month"].astype(str) + "-01"
+)
 
 palette_prod = px.colors.qualitative.Safe
 
@@ -276,6 +280,94 @@ with col_r:
         </div>""", unsafe_allow_html=True)
 
 st.markdown("")
+
+# — Temporal Perfomance —
+st.markdown('<div class="section-label">Temporal Performance</div>', unsafe_allow_html=True)
+
+metric_map = {
+    "Shipments": "total_orders",
+    "Delay Rate (%)": "delay_rate_pct",
+    "Avg Cost ($)": "avg_cost",
+}
+
+metric_label = st.selectbox(
+    "Metric",
+    list(metric_map.keys())
+)
+
+metric = metric_map[metric_label]
+
+mode = st.radio(
+    "Mode",
+    ["Single year", "Compare years"],
+    horizontal=True
+)
+
+selected_years = st.multiselect(
+    "Select years",
+    sorted(df_temporal["year"].unique()),
+    default=sorted(df_temporal["year"].unique())[-1:] if mode == "Single year" else sorted(df_temporal["year"].unique())
+)
+
+df_plot = df_temporal[df_temporal["year"].isin(selected_years)]
+
+fig = go.Figure()
+if mode == "Single year":
+
+    fig.add_trace(go.Scatter(
+        x=df_plot["date"],
+        y=df_plot[metric],
+        mode="lines+markers",
+        line=dict(width=3, color="#F59E0B"),
+        marker=dict(size=5),
+        name=str(selected_years[0])
+    ))
+else:
+    df_plot = df_plot.sort_values(["year", "month"])
+
+    df_plot["month_label"] = df_plot["date"].dt.strftime("%b")
+
+    for y in sorted(df_plot["year"].unique()):
+        dff = df_plot[df_plot["year"] == y]
+
+        fig.add_trace(go.Scatter(
+            x=dff["month"],
+            y=dff[metric],
+            mode="lines+markers",
+            name=str(y),
+            line=dict(width=3),
+            marker=dict(size=5),
+            hovertemplate=f"{y}<br>Month: %{{x}}<br>{metric_label}: %{{y:.2f}}<extra></extra>"
+        ))
+        
+        fig.update_xaxes(
+            tickmode="array",
+            tickvals=list(range(1, 13)),
+            ticktext=["Jan","Feb","Mar","Apr","May","Jun",
+                    "Jul","Aug","Sep","Oct","Nov","Dec"]
+        )
+        
+fig.update_layout(
+    **base_layout(height=350),
+    xaxis=dict(
+        title="Month",
+        tickformat="%b %Y",
+        tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1),
+    ),
+    yaxis=dict(
+        title=metric_label,
+        gridcolor=GRID_COLOR,
+        tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1),
+    ),
+    legend=dict(
+        orientation="h",
+        y=-0.2,
+        font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1),
+    ),
+    margin=dict(l=10, r=10, t=10, b=10),
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 # — Transport Mode side-by-side —
 st.markdown('<div class="section-label">Transport Mode Split</div>', unsafe_allow_html=True)

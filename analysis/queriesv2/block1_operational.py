@@ -170,6 +170,32 @@ class Block1Queries:
             round(f.avg_lead_time_days, 2) AS avg_lead_time_days
         ORDER BY f.route_count ASC, f.primary_route_share_pct DESC, f.shipments DESC
     """
+    
+    # 1.5 TEMPORAL TREND
+    
+    TEMPORAL_TREND = """
+        MATCH (o:Order)
+        WITH date(o.order_date) AS date,
+            o.is_delayed as is_delayed,
+            o.is_delayed as is_disrupted,
+            o.shipping_cost_usd as cost
+
+        WITH 
+            date.year AS year,
+            date.month AS month,
+            count(*) AS total_orders,
+            avg(CASE WHEN is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate,
+            avg(cost) as avg_cost
+
+        RETURN
+            year,
+            month,
+            total_orders,
+            round(100.0 * delay_rate, 2) AS delay_rate_pct,
+            round(avg_cost, 2) as avg_cost
+        ORDER BY year, month
+    """
+    
 
     # EXECUTION METHODS
 
@@ -200,6 +226,10 @@ class Block1Queries:
     @staticmethod
     def od_redundancy_profile(driver) -> pd.DataFrame:
         return run_query(driver, Block1Queries.OD_REDUNDANCY_PROFILE)
+    
+    @staticmethod
+    def temporal_trend(driver) -> pd.DataFrame:
+        return run_query(driver, Block1Queries.TEMPORAL_TREND)
 
     @staticmethod
     def run_all(driver) -> dict:
@@ -217,4 +247,5 @@ class Block1Queries:
             "product_distribution":         Block1Queries.product_distribution(driver),
             "delay_severity_distribution":  Block1Queries.delay_severity_distribution(driver),
             "od_redundancy_profile":        Block1Queries.od_redundancy_profile(driver),
+            "temporal_trend":               Block1Queries.temporal_trend(driver),
         }
