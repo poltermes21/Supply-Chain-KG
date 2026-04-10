@@ -373,7 +373,7 @@ with col_right:
             theta=categories + [categories[0]],
             fill="toself",
             fillcolor=palette_radar[i % len(palette_radar)],
-            opacity=0.18,
+            opacity=0.3,
             line=dict(color=palette_radar[i % len(palette_radar)], width=2),
             name=row["route"],
         ))
@@ -484,7 +484,7 @@ with col_sev:
         ),
         margin=dict(l=10, r=90, t=10, b=10),
         annotations=[dict(
-            text=f"<b>{risk_pct:.1f}%</b><br>of orders with risk",
+            text=f"<b>{risk_pct:.1f}%</b><br>delayed",
             x=0.5, y=0.5,
             font=dict(size=14, family=FONT_SANS, color=TEXT_COLOR1),
             showarrow=False,
