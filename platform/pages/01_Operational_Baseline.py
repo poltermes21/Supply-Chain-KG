@@ -579,8 +579,9 @@ st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">4 · Resiliència de les lanes OD</div>', unsafe_allow_html=True)
 
 metric_options = {
-    "Delay Rate (%)":          "delay_rate_pct",
+    "Total shipments":         "shipments",
     "Route Concentration (%)": "primary_route_share_pct",
+    "Delay Rate (%)":          "delay_rate_pct",
     "Avg Cost ($)":            "avg_cost_usd",
     "Avg Lead Time (d)":       "avg_lead_time_days",
 }
@@ -669,6 +670,7 @@ with col_top:
 st.markdown('<div class="section-subtitle">Top 10 — anàlisi de lanes</div>', unsafe_allow_html=True)
 
 rank_options = {
+    "Total Shipments": "shipments",
     "Route Concentration (%)": "primary_route_share_pct",
     "Delay (%)": "delay_rate_pct",
     "Avg Cost ($)": "avg_cost_usd",
@@ -676,7 +678,8 @@ rank_options = {
 }
 
 title_map = {
-    "Route Concentration (%)": "Major concentration",
+    "Total Shipments": "Highest traffic",
+    "Route Concentration (%)": "Highest concentration",
     "Delay (%)": "Highest delay",
     "Avg Cost ($)": "Highest cost",
     "Avg Lead Time (d)": "Longest lead time",
@@ -704,6 +707,7 @@ df_top10 = (
         [
             "origin",
             "destination",
+            "shipments",
             "primary_route_share_pct",
             "delay_rate_pct",
             "avg_cost_usd",
@@ -713,6 +717,7 @@ df_top10 = (
     .rename(columns={
         "origin": "Origin",
         "destination": "Destination",
+        "shipments": "Total Shipments",
         "primary_route_share_pct": "Route Concentration (%)",
         "delay_rate_pct": "Delay (%)",
         "avg_cost_usd": "Avg Cost ($)",
@@ -725,6 +730,10 @@ st.dataframe(
     hide_index=True,
     use_container_width=True,
     column_config={
+        "Total Shipments": st.column_config.NumberColumn(
+            "Total Shipments",
+            format="%.0f"
+        ),
         "Route Concentration (%)": st.column_config.ProgressColumn(
             "Route Concentration (%)",
             min_value=0,
