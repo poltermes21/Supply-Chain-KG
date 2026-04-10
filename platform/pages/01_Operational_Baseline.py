@@ -242,7 +242,7 @@ with col_v:
         eff_class = "kpi-alert" if eff >= 0 else "kpi-ok"
         st.markdown(f"""
         <div class="kpi-card {eff_class}">
-            <div class="kpi-label">Lead Time Performance</div>
+            <div class="kpi-label">LT Perfomance</div>
             <div class="kpi-value">{eff:.1f}%</div>
             <div class="kpi-sub">vs scheduled plan</div>
         </div>

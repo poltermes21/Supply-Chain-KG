@@ -297,15 +297,25 @@ df_corr = df_corr.sort_values("risk_level")
 
 fig_corr = make_subplots(specs=[[{"secondary_y": True}]])
 
+fig_corr.add_trace(go.Bar(
+    x=df_corr["risk_level"].str.capitalize(),
+    y=df_corr["avg_combined_risk_score"],
+    name="Avg Combined Risk Score",
+    marker_color=[RISK_COLORS.get(r, "#6B7280") for r in df_corr["risk_level"]],
+    opacity=0.7,
+    hovertemplate="<b>%{x}</b><br>Risk Score: %{y:.4f}<extra></extra>",
+), secondary_y=False)
+
+
 fig_corr.add_trace(go.Scatter(
     x=df_corr["risk_level"].str.capitalize(),
     y=df_corr["disruption_rate_pct"],
     mode="lines+markers",
     name="Disruption Rate (%)",
-    line=dict(color="#EF4444", width=2.5),
-    marker=dict(size=9, color="#EF4444", line=dict(width=1.5, color="#0F1117")),
+    line=dict(color="#EF4444", width=2.5, dash="dot"),
+    marker=dict(size=9, line=dict(width=1, color="#0F1117")),
     hovertemplate="<b>%{x}</b><br>Disruption: %{y:.2f}%<extra></extra>",
-), secondary_y=False)
+), secondary_y=True)
 
 fig_corr.add_trace(go.Scatter(
     x=df_corr["risk_level"].str.capitalize(),
@@ -313,17 +323,8 @@ fig_corr.add_trace(go.Scatter(
     mode="lines+markers",
     name="Delay Rate (%)",
     line=dict(color="#F59E0B", width=2.5, dash="dot"),
-    marker=dict(size=9, color="#F59E0B", line=dict(width=1.5, color="#0F1117")),
-    hovertemplate="<b>%{x}</b><br>Delay Rate: %{y:.2f}%<extra></extra>",
-), secondary_y=False)
-
-fig_corr.add_trace(go.Bar(
-    x=df_corr["risk_level"].str.capitalize(),
-    y=df_corr["avg_combined_risk_score"],
-    name="Avg Risk Score",
-    marker_color=[RISK_COLORS.get(r, "#6B7280") for r in df_corr["risk_level"]],
-    opacity=0.25,
-    hovertemplate="<b>%{x}</b><br>Avg Risk Score: %{y:.4f}<extra></extra>",
+    marker=dict(size=9, line=dict(width=1, color="#0F1117")),
+    hovertemplate="<b>%{x}</b><br>Delay: %{y:.2f}%<extra></extra>",
 ), secondary_y=True)
 
 fig_corr.update_layout(
@@ -340,7 +341,7 @@ fig_corr.update_yaxes(
     secondary_y=False,
 )
 fig_corr.update_yaxes(
-    title_text="Avg Risk Score",
+    title_text="Avg Combined Risk Score",
     title_font=dict(family=FONT_SANS, size=11, color=AXIS_COLOR),
     tickfont=dict(family=FONT_SANS, size=10, color=AXIS_COLOR),
     gridcolor=GRID_COLOR,
@@ -361,7 +362,7 @@ st.markdown('<div class="section-title">2 · On es concentra el risc</div>', uns
 tab_route, tab_product = st.tabs(["Per ruta", "Per categoria de producte"])
 
 def stacked_risk_bar(df, dimension_col, title_caption):
-    """Stacked bar geo+weather + combined score line (secondary axis)."""
+    """Stacked bar geo+weather + combined risk line (secondary axis)."""
     df = df.sort_values("avg_combined_risk_score", ascending=False)
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -385,13 +386,13 @@ def stacked_risk_bar(df, dimension_col, title_caption):
     ), secondary_y=False)
 
     fig.add_trace(go.Scatter(
-        name="Combined score (eix dret)",
+        name="Avg Combined Risk Score (eix dret)",
         x=df[dimension_col],
         y=df["avg_combined_risk_score"],
         mode="lines+markers",
         line=dict(color="#E5E7EB", width=1.8, dash="dot"),
-        marker=dict(size=7, color="#E5E7EB", line=dict(width=1, color="#0F1117")),
-        hovertemplate="<b>%{x}</b><br>Combined: %{y:.4f}<extra></extra>",
+        marker=dict(size=9, color="#E5E7EB", line=dict(width=1, color="#0F1117")),
+        hovertemplate="<b>%{x}</b><br>Risk Combined: %{y:.4f}<extra></extra>",
     ), secondary_y=True)
 
     fig.update_layout(
@@ -406,7 +407,7 @@ def stacked_risk_bar(df, dimension_col, title_caption):
     fig.update_xaxes(**styled_xaxis())
     fig.update_yaxes(**styled_yaxis(title="Risk index (geo + weather)"), secondary_y=False)
     fig.update_yaxes(
-        title_text="Combined score",
+        title_text="Avg Combined Risk Score",
         title_font=dict(family=FONT_SANS, size=11, color=AXIS_COLOR),
         tickfont=dict(family=FONT_SANS, size=10, color=AXIS_COLOR),
         gridcolor=GRID_COLOR, zeroline=False,
@@ -478,7 +479,7 @@ fig_mirror = make_subplots(
 
 # LEFT side — outbound (values go negative for mirror effect)
 fig_mirror.add_trace(go.Bar(
-    name="Geo (outbound)",
+    name="Geoplitical",
     x=-df_mirror["out_geo"],
     y=df_mirror["city"],
     orientation="h",
@@ -490,7 +491,7 @@ fig_mirror.add_trace(go.Bar(
 ), row=1, col=1)
 
 fig_mirror.add_trace(go.Bar(
-    name="Weather (outbound)",
+    name="Weather",
     x=-df_mirror["out_weather"],
     y=df_mirror["city"],
     orientation="h",
@@ -670,6 +671,8 @@ else:
                 title=dict(text="Risk Score", font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR)),
                 tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR),
                 thickness=12,
+                x=1.02,
+                xpad=10
             ),
             showscale=True,
         ),
@@ -681,7 +684,7 @@ else:
                 df_joint_sorted["avg_delay_days"],
             )
         ],
-        textposition="outside",
+        textposition="none",
         textfont=dict(size=9, family=FONT_MONO, color=TEXT_COLOR),
         hovertemplate=(
             "<b>%{y}</b><br>"
@@ -689,6 +692,7 @@ else:
             "Disruption: %{customdata[0]:.1f}%<br>"
             "Delay Rate: %{customdata[1]:.1f}%<br>"
             "Avg Delay: %{customdata[2]:.2f}d<extra></extra>"
+            
         ),
         customdata=df_joint_sorted[["disruption_rate_pct", "delay_rate_pct", "avg_delay_days"]].values,
     ))
@@ -696,7 +700,7 @@ else:
         **base_layout(height=max(220, len(df_joint) * 55)),
         xaxis=styled_xaxis(title="Total Shipments"),
         yaxis=styled_yaxis(showgrid=False),
-        margin=dict(l=12, r=160, t=12, b=12),
+        margin=dict(l=12, r=120, t=12, b=12),
     )
     st.plotly_chart(fig_joint, use_container_width=True)
     st.caption("Rutas amb exposició simultània a risc geopolític i meteorològic per sobre del threshold. Color = combined risk score (vermell = més alt).")
