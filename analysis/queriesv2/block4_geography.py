@@ -52,7 +52,7 @@ class Block4Queries:
     
     # 4.1 CITY FLOW EXPOSURE
 
-    COUNTRY_FLOW_EXPOSURE = """
+    CITY_FLOW_EXPOSURE = """
         MATCH (c:City)
         WITH 
             c.id AS city,
