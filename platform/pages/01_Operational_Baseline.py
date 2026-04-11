@@ -447,12 +447,12 @@ with col_left:
 
 with col_right:
     st.markdown('<div class="section-label">Perfil per ruta — Lead Time, Cost & Delay (normalitzat)</div>', unsafe_allow_html=True)
+    st.caption("Valors normalitzats per comparar perfils relatius entre rutes.")
 
     cols_norm = ["avg_lead_time_days", "avg_cost_usd", "delay_rate_pct"]
     df_radar = df_route.copy()
     for c in cols_norm:
-        mn, mx = df_radar[c].min(), df_radar[c].max()
-        df_radar[c + "_norm"] = (df_radar[c] - mn) / (mx - mn) if mx > mn else 0.5
+        df_radar[c + "_norm"] = df_radar[c].rank(pct=True)
 
     categories = ["Lead Time", "Cost", "Delay Rate"]
     fig_radar = go.Figure()
@@ -473,7 +473,12 @@ with col_right:
         **base_layout(height=285),
         polar=dict(
             bgcolor=TRANSPARENT,
-            radialaxis=dict(visible=False, range=[0, 1]),
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1],
+                showticklabels=False,
+                gridcolor="rgba(229, 231, 235, 0.3)"
+            ),
             angularaxis=dict(tickfont=dict(size=11, family=FONT_SANS, color=TEXT_COLOR1)),
         ),
         legend=dict(font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), orientation="h", y=-0.18),
@@ -755,46 +760,27 @@ with col_top:
             tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1),
             showgrid=False,
         ),
-        margin=dict(l=8, r=35, t=8, b=8),
+        margin=dict(l=8, r=8, t=8, b=8),
     )
+    max_val = redundancy_counts["Count"].max()
+
+    fig_red.update_layout(
+        xaxis=dict(range=[0, max_val * 1.2], visible=False),
+    )
+    
     st.plotly_chart(fig_red, use_container_width=True)
     
 st.markdown('<div class="section-subtitle">Top 10 — anàlisi de lanes</div>', unsafe_allow_html=True)
 
-rank_options = {
-    "Total Shipments": "shipments",
-    "Route Concentration (%)": "primary_route_share_pct",
-    "Delay (%)": "delay_rate_pct",
-    "Avg Cost ($)": "avg_cost_usd",
-    "Avg Lead Time (d)": "avg_lead_time_days",
-}
+# Per defecte ordenem per shipments
+default_metric = "shipments"
 
-title_map = {
-    "Total Shipments": "Highest traffic",
-    "Route Concentration (%)": "Highest concentration",
-    "Delay (%)": "Highest delay",
-    "Avg Cost ($)": "Highest cost",
-    "Avg Lead Time (d)": "Longest lead time",
-}
-
-selected_rank_label = st.selectbox(
-    "Rank lanes by",
-    options=list(rank_options.keys()),
-    index=0,
-)
-
-selected_rank_metric = rank_options[selected_rank_label]
-
-st.markdown(
-    f"<div class='section-label'>Top 10 — {title_map[selected_rank_label]}</div>",
-    unsafe_allow_html=True
-)
-
-st.caption(f"Ranking metric: {selected_rank_label}")
+# Nota per l’usuari
+st.caption("Tip: pots filtrar i ordenar directament a la taula fent clic als headers de columna.")
 
 df_top10 = (
     df_od
-    .sort_values(selected_rank_metric, ascending=False)
+    .sort_values(default_metric, ascending=False)
     .head(10)[
         [
             "origin",
