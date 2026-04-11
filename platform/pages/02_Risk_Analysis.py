@@ -810,6 +810,24 @@ labels = [
 avg_risk_lanes = df_lanes["avg_combined_risk_score"].mean()
 avg_disr_lanes = df_lanes["disrupted_rate_pct"].mean()
 
+padding_factor = 0.15
+x_min = df_lanes["disrupted_rate_pct"].min()
+x_max = df_lanes["disrupted_rate_pct"].max()
+y_min = df_lanes["avg_combined_risk_score"].min()
+y_max = df_lanes["avg_combined_risk_score"].max()
+x_range = [
+    x_min - (x_max - x_min) * padding_factor,
+    x_max + (x_max - x_min) * padding_factor,
+]
+
+y_range = [
+    y_min - (y_max - y_min) * padding_factor,
+    y_max + (y_max - y_min) * padding_factor,
+]
+
+delay_min = df_lanes["delay_rate_pct"].min()
+delay_max = df_lanes["delay_rate_pct"].max()
+
 fig_lanes = go.Figure()
 
 fig_lanes.add_hline(
@@ -861,6 +879,8 @@ fig_lanes.add_trace(go.Scatter(
         size=sizes,
         color=df_plot["delay_rate_pct"],
         colorscale="RdYlGn_r",
+        cmin=delay_min,
+        cmax=delay_max,
         showscale=True,
         opacity=opacities,
         line=dict(width=border_widths, color=border_colors),
@@ -879,8 +899,15 @@ fig_lanes.add_trace(go.Scatter(
 
 fig_lanes.update_layout(
     **base_layout(height=460),
-    xaxis=styled_xaxis(title="Disruption Rate (%)", ticksuffix="%"),
-    yaxis=styled_yaxis(title="Avg Combined Risk Score"),
+    xaxis=styled_xaxis(
+        title="Disruption Rate (%)",
+        ticksuffix="%",
+        range=x_range
+    ),
+    yaxis=styled_yaxis(
+        title="Avg Combined Risk Score",
+        range=y_range
+    ),
     margin=dict(l=12, r=80, t=16, b=12),
 )
 
