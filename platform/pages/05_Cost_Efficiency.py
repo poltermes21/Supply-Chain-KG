@@ -352,6 +352,16 @@ if not df_by_type.empty:
             marker=dict(size=8, color="#E5E7EB", line=dict(width=1.5, color="#0F1117")),
             hovertemplate="<b>%{x}</b><br>P95 Delay: %{y:.2f}d<extra></extra>",
         ), secondary_y=True)
+        
+        fig_cost.add_trace(go.Scatter(
+            x=df_by_type["disruption_type"],
+            y=df_by_type["avg_delay_days"],
+            name="Avg Delay (dies)",
+            mode="lines+markers",
+            line=dict(color="#E5E7EB", width=2, dash="dash"),
+            marker=dict(size=7, color="#E5E7EB", line=dict(width=1.5, color="#0F1117")),
+            hovertemplate="<b>%{x}</b><br>Avg Delay: %{y:.2f}d<extra></extra>",
+        ), secondary_y=True)
 
         fig_cost.update_layout(
             **base_layout(height=450),
@@ -361,7 +371,7 @@ if not df_by_type.empty:
         )
         fig_cost.update_yaxes(**styled_yaxis(title="Avg Cost Premium (%)"), secondary_y=False)
         fig_cost.update_yaxes(
-            title_text="P95 Delay (dies)",
+            title_text="Delay days",
             title_font=dict(family=FONT_SANS, size=11, color=AXIS_COLOR),
             tickfont=dict(family=FONT_SANS, size=10, color=AXIS_COLOR),
             gridcolor=GRID_COLOR, zeroline=False,
@@ -807,7 +817,7 @@ if not df_air.empty:
         ],
         opacity=0.88,
         text=[
-            f"{row['expedited_air_share_pct']:.1f}%  ·  avg premium +{row['avg_cost_premium_when_expedited']:.1f}%"
+            f"{row['expedited_air_share_pct']:.1f}%"
             for _, row in df_air_sorted.iterrows()
         ],
         textposition="outside",
