@@ -262,7 +262,7 @@ if not df_baseline.empty:
                 "label": "Cost Premium",
                 "d_val": f"{d['avg_cost_premium_pct']:.2f}%",
                 "nd_val": f"{nd['avg_cost_premium_pct']:.2f}%",
-                "delta": f"+{d['avg_cost_premium_pct']:.2f}%",
+                "delta": f"+{(d['avg_cost_premium_pct'] - nd['avg_cost_premium_pct']):.2f}%",
                 "color": "#EF4444"
             },
             {
@@ -380,8 +380,8 @@ if not df_by_type.empty:
         fig_cost.update_xaxes(**styled_xaxis())
         st.plotly_chart(fig_cost, use_container_width=True)
         st.caption(
-            "Barres = cost premium mitjà. Línia puntejada = P95 delay (el 95% dels enviaments "
-            "afectats tenen un retard ≤ aquest valor). Hover per veure el detall complet."
+            "Barres = cost premium mitjà. Línia puntejada = P95 delay. "
+            "Línia discontínua = Avg delay. Ambdues línies comparteixen l'eix dret (dies)."
         )
 with col_radar:
     st.markdown(
