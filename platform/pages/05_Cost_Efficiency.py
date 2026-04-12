@@ -193,7 +193,7 @@ st.markdown('<div class="section-label">Block 5</div>', unsafe_allow_html=True)
 st.markdown("# 💰 Cost Analysis & Mitigation Efficiency")
 st.markdown(
     "Economic impact of disruptions and effectiveness of mitigation responses — "
-    "cost premiums, residual delays and context-dependent recovery rates."
+    "cost increases, residual delays and context-dependent recovery rates."
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
@@ -259,10 +259,10 @@ if not df_baseline.empty:
                 "color": "#EF4444" if (d['avg_cost_usd'] - nd['avg_cost_usd']) > 0 else "#10B981"
             },
             {
-                "label": "Cost Premium",
-                "d_val": f"{d['avg_cost_premium_pct']:.2f}%",
-                "nd_val": f"{nd['avg_cost_premium_pct']:.2f}%",
-                "delta": f"+{(d['avg_cost_premium_pct'] - nd['avg_cost_premium_pct']):.2f}%",
+                "label": "Cost vs Baseline",
+                "d_val": f"{d['avg_cost_vs_baseline_pct']:.2f}%",
+                "nd_val": f"{nd['avg_cost_vs_baseline_pct']:.2f}%",
+                "delta": f"+{(d['avg_cost_vs_baseline_pct'] - nd['avg_cost_vs_baseline_pct']):.2f}%",
                 "color": "#EF4444"
             },
             {
@@ -318,7 +318,7 @@ if not df_by_type.empty:
     col_bar, col_radar = st.columns([5, 4])
 
     with col_bar:
-        st.markdown('<div class="section-label">Cost premium (barra) i P95 delay days (línia)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Cost vs baseline (barra) i P95 delay days (línia)</div>', unsafe_allow_html=True)
 
         fig_cost = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -326,15 +326,15 @@ if not df_by_type.empty:
             fig_cost.add_trace(go.Bar(
                 name=row["disruption_type"],
                 x=[row["disruption_type"]],
-                y=[row["avg_cost_premium_pct"]],
+                y=[row["avg_cost_vs_baseline_pct"]],
                 marker_color=COLOR_MAP[row["disruption_type"]],
                 opacity=0.85,
-                text=[f"{row['avg_cost_premium_pct']:.1f}%"],
+                text=[f"{row['avg_cost_vs_baseline_pct']:.1f}%"],
                 textposition="outside",
                 textfont=dict(size=10, family=FONT_MONO, color=TEXT_COLOR1),
                 hovertemplate=(
                     f"<b>{row['disruption_type']}</b><br>"
-                    f"Cost Premium: {row['avg_cost_premium_pct']:.2f}%<br>"
+                    f"Cost vs Baseline: {row['avg_cost_vs_baseline_pct']:.2f}%<br>"
                     f"Avg Delay: {row['avg_delay_days']:.2f}d<br>"
                     f"P95 Delay: {row['p95_delay_days']:.2f}d<br>"
                     f"Shipments: {int(row['total_shipments']):,}"
@@ -369,7 +369,7 @@ if not df_by_type.empty:
                         font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1)),
             margin=dict(l=12, r=55, t=30, b=12),
         )
-        fig_cost.update_yaxes(**styled_yaxis(title="Avg Cost Premium (%)"), secondary_y=False)
+        fig_cost.update_yaxes(**styled_yaxis(title="Avg Cost vs Baseline (%)"), secondary_y=False)
         fig_cost.update_yaxes(
             title_text="Delay days",
             title_font=dict(family=FONT_SANS, size=11, color=AXIS_COLOR),
@@ -380,7 +380,7 @@ if not df_by_type.empty:
         fig_cost.update_xaxes(**styled_xaxis())
         st.plotly_chart(fig_cost, use_container_width=True)
         st.caption(
-            "Barres = cost premium mitjà. Línia puntejada = P95 delay. "
+            "Barres = cost vs baseline mitjà. Línia puntejada = P95 delay. "
             "Línia discontínua = Avg delay. Ambdues línies comparteixen l'eix dret (dies)."
         )
 with col_radar:
@@ -396,13 +396,13 @@ with col_radar:
 
         # normalització percentil (mateix estil que routes radar)
         radar_dims = [
-            "avg_cost_premium_pct",
+            "avg_cost_vs_baseline_pct",
             "avg_delay_days",
             "p95_delay_days",
             "total_shipments"
         ]
 
-        categories = ["Cost Premium", "Avg Delay", "P95 Delay", "Volume"]
+        categories = ["Cost vs Baseline", "Avg Delay", "P95 Delay", "Volume"]
 
         for c in radar_dims:
             df_r[c + "_norm"] = df_r[c].rank(pct=True)
@@ -411,7 +411,7 @@ with col_radar:
             color = PALETTE[i % len(PALETTE)]
 
             vals = [
-                row["avg_cost_premium_pct_norm"],
+                row["avg_cost_vs_baseline_pct_norm"],
                 row["avg_delay_days_norm"],
                 row["p95_delay_days_norm"],
                 row["total_shipments_norm"]
@@ -464,14 +464,14 @@ if not df_mit_sum.empty:
     st.markdown('<div class="section-label">Mètriques per acció de mitigació</div>', unsafe_allow_html=True)
     mit_cols = st.columns(len(df_mit_sum))
     max_eff  = df_mit_sum["effectiveness_rate_pct"].max()
-    max_prem = df_mit_sum["avg_cost_premium_pct"].max()
+    max_prem = df_mit_sum["avg_cost_vs_baseline_pct"].max()
     max_del  = df_mit_sum["residual_delay_days"].max()
     max_rec  = df_mit_sum["recovered_within_schedule_pct"].max()
 
     for i, (_, row) in enumerate(df_mit_sum.iterrows()):
         color = MITIGATION_COLORS.get(row["mitigation_action"], "#6B7280")
         w_eff  = row["effectiveness_rate_pct"] / max_eff * 100 if max_eff > 0 else 0
-        w_prem = row["avg_cost_premium_pct"]    / max_prem * 100 if max_prem > 0 else 0
+        w_prem = row["avg_cost_vs_baseline_pct"]    / max_prem * 100 if max_prem > 0 else 0
         w_del  = row["residual_delay_days"]      / max_del * 100  if max_del > 0 else 0
         w_rec  = row["recovered_within_schedule_pct"] / max_rec * 100 if max_rec > 0 else 0
 
@@ -496,8 +496,8 @@ if not df_mit_sum.empty:
                 </div>
 
                 <div class="mit-metric">
-                    <div class="mit-metric-val">+{row['avg_cost_premium_pct']:.1f}%</div>
-                    <div class="mit-metric-lbl">Cost premium</div>
+                    <div class="mit-metric-val">+{row['avg_cost_vs_baseline_pct']:.1f}%</div>
+                    <div class="mit-metric-lbl">Cost vs Baseline</div>
                     <div class="progress-bar-bg">
                         <div class="progress-bar-fill"
                              style="width:{w_prem:.1f}%;background:{color};opacity:0.65"></div>
@@ -593,8 +593,8 @@ if not df_mit_disr.empty:
                         <div class="mit-metric-lbl">Effectiveness</div>
                     </div>
                     <div class="mit-metric">
-                        <div class="mit-metric-val">+{row['avg_cost_premium_pct']:.1f}%</div>
-                        <div class="mit-metric-lbl">Cost premium</div>
+                        <div class="mit-metric-val">+{row['avg_cost_vs_baseline_pct']:.1f}%</div>
+                        <div class="mit-metric-lbl">Cost vs Baseline</div>
                     </div>
                     <div class="mit-metric">
                         <div class="mit-metric-val">{row['residual_delay_days']:.2f}d</div>
@@ -611,12 +611,12 @@ if not df_mit_disr.empty:
         st.markdown('<div class="section-label">Comparativa ordenada per efectivitat</div>', unsafe_allow_html=True)
 
         df_table = df_filt[[
-            "mitigation_action", "effectiveness_rate_pct", "avg_cost_premium_pct",
+            "mitigation_action", "effectiveness_rate_pct", "avg_cost_vs_baseline_pct",
             "residual_delay_days", "recovered_within_schedule_pct",
             "fully_effective", "partially_effective", "not_effective", "total_cases"
         ]].sort_values("effectiveness_rate_pct", ascending=False).copy()
         df_table.columns = [
-            "Action", "Effectiveness (%)", "Cost Premium (%)",
+            "Action", "Effectiveness (%)", "Cost vs Baseline (%)",
             "Residual Delay (d)", "On Schedule (%)",
             "Fully", "Partially", "Not  ⚠", "Total Cases"
         ]
@@ -667,7 +667,7 @@ if not df_mit_ctx.empty:
     else:
         metric_map = {
             "Effectiveness (%)":  "effectiveness_rate_pct",
-            "Cost Premium (%)":   "avg_cost_premium_pct",
+            "Cost vs Baseline (%)":   "avg_cost_vs_baseline_pct",
             "Residual Delay (d)": "residual_delay_days",
             "On Schedule (%)":    "recovered_within_schedule_pct",
         }
@@ -712,7 +712,7 @@ if not df_mit_ctx.empty:
 
         colorscale_map = {
             "effectiveness_rate_pct":         "RdYlGn",
-            "avg_cost_premium_pct":           "Reds",
+            "avg_cost_vs_baseline_pct":       "Reds",
             "residual_delay_days":            "Reds",
             "recovered_within_schedule_pct":  "Greens",
         }
@@ -768,12 +768,12 @@ if not df_mit_ctx.empty:
             st.caption("Tip: pots ordenar directament a la taula fent clic als headers de columna.")
             df_ctx_display = df_ctx[[
                 "disruption_type", "route", "risk_level", "mitigation_action",
-                "total_cases", "effectiveness_rate_pct", "avg_cost_premium_pct",
+                "total_cases", "effectiveness_rate_pct", "avg_cost_vs_baseline_pct",
                 "residual_delay_days", "recovered_within_schedule_pct",
             ]].sort_values("disruption_type", ascending=False).copy()
             df_ctx_display.columns = [
                 "Disruption", "Route", "Risk", "Action",
-                "Cases", "Effectiveness (%)", "Cost Premium (%)",
+                "Cases", "Effectiveness (%)", "Cost vs Baseline (%)",
                 "Residual Delay (d)", "On Schedule (%)",
             ]
             st.dataframe(
@@ -826,10 +826,10 @@ if not df_air.empty:
             "<b>%{y}</b><br>"
             "Air usage: %{x:.1f}%<br>"
             "Cases: %{customdata[0]:,}<br>"
-            "Avg cost premium (air): +%{customdata[1]:.1f}%"
+            "Avg cost vs baseline: +%{customdata[1]:.1f}%"
             "<extra></extra>"
         ),
-        customdata=df_air_sorted[["expedited_air_cases", "avg_cost_premium_when_expedited"]].values,
+        customdata=df_air_sorted[["expedited_air_cases", "avg_cost_vs_baseline_pct_when_expedited"]].values,
     ))
 
     fig_air.update_layout(

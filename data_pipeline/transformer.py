@@ -304,7 +304,7 @@ class DataTransformer:
         Metrics created:
             - mitigation_effectiveness (str): 4-level classification of mitigation outcome
             - mitigation_effective (bool): True if fully or partially effective
-            - cost_premium (%): (cost - avg_normal_cost) / avg_normal_cost * 100
+            - cost_vs_baseline_pct (%): (cost - avg_normal_cost) / avg_normal_cost * 100
             - route_segment (str): "{Origin_Region}_to_{Destination_Region}"
         """
         print("Creating resilience metrics...")
@@ -331,7 +331,7 @@ class DataTransformer:
             self.df['Origin_Region'] + '_to_' + self.df['Destination_Region']
         )
         
-                # 1. Crear weight buckets
+        # 1. Crear weight buckets
         self.df['weight_bucket'] = pd.qcut(
             self.df['Order_Weight_Kg'], 
             q=4, 
@@ -342,22 +342,22 @@ class DataTransformer:
         # 2. Baseline segmentat (només no disruptives)
         baseline = (
             self.df[~self.df['is_disrupted']]
-            .groupby(['route_segment', 'Transportation_Mode', 'weight_bucket'])['Shipping_Cost_USD']
+            .groupby(['route_segment', 'Transportation_Mode', 'Product_Category'])['Shipping_Cost_USD']
             .median() 
         )
 
         # 3. Assignar baseline a cada fila
         self.df = self.df.join(
             baseline,
-            on=['route_segment', 'Transportation_Mode', 'weight_bucket'],
+            on=['route_segment', 'Transportation_Mode', 'Product_Category'],
             rsuffix='_baseline'
         )
 
-        # 4. Cost premium
-        self.df['cost_premium'] = (
+        # 4. Cost vs baseline pct
+        self.df['cost_vs_baseline_pct'] = (
             (self.df['Shipping_Cost_USD'] - self.df['Shipping_Cost_USD_baseline']) /
-            self.df['Shipping_Cost_USD_baseline'] * 100
-        )
+            self.df['Shipping_Cost_USD_baseline'].replace(0, np.nan)
+        ) * 100
 
         self.transformation_stats['resilience'] = {
             'mitigation_effectiveness_distribution': self.df['mitigation_effectiveness'].value_counts().to_dict(),
@@ -367,7 +367,7 @@ class DataTransformer:
 
         print(f"  Effectiveness distribution: {self.df['mitigation_effectiveness'].value_counts().to_dict()}")
         print(f"  Effective mitigations (fully + partially): {self.df['mitigation_effective'].sum()}")
-        print(f"  Avg cost premium disrupted orders: {self.df[self.df['is_disrupted']]['cost_premium'].mean():.2f}%")
+        print(f"  Avg cost vs baseline pct orders: {self.df[self.df['is_disrupted']]['cost_vs_baseline_pct'].mean():.2f}%")
     
     # 4. ENTITY PREPARATION
     
@@ -440,7 +440,7 @@ class DataTransformer:
             1. Classification fields (delay_severity, risk_level, cost_category)
             2. Boolean flags (is_disrupted, is_delayed)
             3. Efficiency metrics (lead_time_deviation_pct, cost_per_kg, delay_ratio)
-            4. Resilience metrics (mitigation_effective, cost_premium, route_segment)
+            4. Resilience metrics (mitigation_effective, cost_vs_baseline_pct, route_segment)
             5. Risk assessment ID (assessment_id)
             6. Entity validation (presence and null check for all KG node columns)
         """
@@ -534,7 +534,7 @@ class DataTransformer:
             # Resilience metrics
             'mitigation_effectiveness'
             'mitigation_effective',
-            'cost_premium',
+            'cost_vs_baseline_pct',
             'route_segment',
             # Entity IDs
             'assessment_id',
