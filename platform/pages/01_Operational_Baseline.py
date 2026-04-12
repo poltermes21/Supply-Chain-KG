@@ -776,7 +776,7 @@ st.markdown('<div class="section-subtitle">Top 10 — anàlisi de lanes</div>', 
 default_metric = "shipments"
 
 # Nota per l’usuari
-st.caption("Tip: pots filtrar i ordenar directament a la taula fent clic als headers de columna.")
+st.caption("Tip: pots ordenar directament a la taula fent clic als headers de columna.")
 
 df_top10 = (
     df_od
