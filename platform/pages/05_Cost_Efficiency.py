@@ -655,106 +655,126 @@ if not df_mit_ctx.empty:
             unsafe_allow_html=True,
         )
     else:
-        # Aggregate across selected filters
+        metric_map = {
+            "Effectiveness (%)":  "effectiveness_rate_pct",
+            "Cost Premium (%)":   "avg_cost_premium_pct",
+            "Residual Delay (d)": "residual_delay_days",
+            "On Schedule (%)":    "recovered_within_schedule_pct",
+        }
+        sel_metric   = st.selectbox("Metric", list(metric_map.keys()), index=0)
+        metric_field = metric_map[sel_metric]
+
+        suffix = "d" if "Delay" in sel_metric else "%"
+
         df_agg_ctx = (
-            df_ctx.groupby("mitigation_action")
+            df_ctx.groupby(["mitigation_action", "disruption_type"])
             .agg(
-                effectiveness_rate_pct=("effectiveness_rate_pct", "mean"),
+                value=(metric_field, "mean"),
                 total_cases=("total_cases", "sum"),
-                residual_delay_days=("residual_delay_days", "mean"),
-                avg_cost_premium_pct=("avg_cost_premium_pct", "mean"),
-                recovered_within_schedule_pct=("recovered_within_schedule_pct", "mean"),
             )
             .reset_index()
         )
 
-        # Build heatmap: rows = mitigation actions, cols = metrics
-        heatmap_metrics = {
-            "Effectiveness (%)":   "effectiveness_rate_pct",
-            "Cost Premium (%)":    "avg_cost_premium_pct",
-            "Residual Delay (d)":  "residual_delay_days",
-            "On Schedule (%)":     "recovered_within_schedule_pct",
-        }
+        heatmap_df = df_agg_ctx.pivot(
+            index="mitigation_action",
+            columns="disruption_type",
+            values="value",
+        )
+        cases_df = df_agg_ctx.pivot(
+            index="mitigation_action",
+            columns="disruption_type",
+            values="total_cases",
+        )
 
-        z_vals, text_vals, low_n_mask = [], [], []
-        for _, row in df_agg_ctx.iterrows():
-            row_z, row_t, row_mask = [], [], []
-            is_low_n = row["total_cases"] < LOW_N_THRESHOLD
-            for col_label, col_field in heatmap_metrics.items():
-                val = row[col_field]
-                row_z.append(val)
-                suffix = "%" if "%" in col_label else "d"
-                row_t.append(f"{'⚠ ' if is_low_n else ''}{val:.1f}{suffix}")
-                row_mask.append(is_low_n)
-            z_vals.append(row_z)
-            text_vals.append(row_t)
-            low_n_mask.append(row_mask)
+        # ── text matrix: value + low-N warning ──────────────
+        text_matrix = []
+        for r_idx, action in enumerate(heatmap_df.index):
+            row_text = []
+            for c_idx, disr in enumerate(heatmap_df.columns):
+                val   = heatmap_df.loc[action, disr]
+                cases = cases_df.loc[action, disr]
+                if pd.isna(val):
+                    row_text.append("—")
+                else:
+                    prefix = "⚠ " if (not pd.isna(cases) and cases < LOW_N_THRESHOLD) else ""
+                    row_text.append(f"{prefix}{val:.1f}{suffix}")
+            text_matrix.append(row_text)
+
+        colorscale_map = {
+            "effectiveness_rate_pct":         "RdYlGn",
+            "avg_cost_premium_pct":           "Reds",
+            "residual_delay_days":            "Reds",
+            "recovered_within_schedule_pct":  "Greens",
+        }
+        colorscale = colorscale_map.get(metric_field, "Viridis")
 
         fig_ctx = go.Figure(go.Heatmap(
-            z=z_vals,
-            x=list(heatmap_metrics.keys()),
-            y=df_agg_ctx["mitigation_action"].tolist(),
-            colorscale="RdYlGn",
+            z=heatmap_df.values,
+            x=heatmap_df.columns.tolist(),
+            y=heatmap_df.index.tolist(),
+            colorscale=colorscale,
+            xgap=3,
+            ygap=3,
             colorbar=dict(
-                title=dict(text="Value", font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1)),
+                title=dict(text=sel_metric, font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1)),
                 tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1),
                 thickness=12,
             ),
-            text=text_vals,
+            # ── FIX: afegim text i texttemplate ──
+            text=text_matrix,
             texttemplate="%{text}",
-            textfont=dict(size=11, family=FONT_MONO, color=TEXT_COLOR2),
+            textfont=dict(size=11, family=FONT_MONO, color="#1A1D27"),
             hoverongaps=False,
             hovertemplate=(
-                "<b>%{y}</b><br>%{x}: %{z:.2f}<br>"
-                "Total cases: %{customdata}<extra></extra>"
+                "<b>%{y}</b><br>"
+                "Disruption: %{x}<br>"
+                f"{sel_metric}: %{{z:.2f}}{suffix}<br>"
+                "Cases: %{customdata}<extra></extra>"
             ),
-            customdata=[[int(row["total_cases"])] * len(heatmap_metrics)
-                        for _, row in df_agg_ctx.iterrows()],
+            customdata=cases_df.values,
         ))
+
         fig_ctx.update_layout(
-            **base_layout(height=max(200, len(df_agg_ctx) * 70 + 60)),
+            **base_layout(height=max(300, len(heatmap_df.index) * 70 + 60)),
             xaxis=dict(
                 tickfont=dict(size=11, family=FONT_SANS, color=TEXT_COLOR1),
+                tickangle=-30,
                 linecolor="#3D4151",
             ),
             yaxis=dict(
                 tickfont=dict(size=11, family=FONT_SANS, color=TEXT_COLOR1),
                 linecolor="#3D4151",
             ),
-            margin=dict(l=12, r=12, t=16, b=12),
+            margin=dict(l=12, r=12, t=20, b=60),
         )
         st.plotly_chart(fig_ctx, use_container_width=True)
 
-        # Low-N warning
-        any_low_n = df_agg_ctx["total_cases"].min() < LOW_N_THRESHOLD
+        # Low-N warning global
+        any_low_n = (cases_df < LOW_N_THRESHOLD).any(skipna=True).any()
         if any_low_n:
-            st.markdown(
-                f'<span class="lown-warn">⚠ Les cel·les marcades amb ⚠ tenen menys de {LOW_N_THRESHOLD} casos — '
-                f'els valors poden no ser estadísticament representatius.</span>',
-                unsafe_allow_html=True,
-            )
+            st.caption(f"⚠ Les cel·les marcades amb ⚠ tenen menys de {LOW_N_THRESHOLD} casos — valors poden no ser estadísticament representatius.")
 
         with st.expander("📋 Taula detallada per context"):
             st.caption("Tip: pots ordenar directament a la taula fent clic als headers de columna.")
             df_ctx_display = df_ctx[[
                 "disruption_type", "route", "risk_level", "mitigation_action",
                 "total_cases", "effectiveness_rate_pct", "avg_cost_premium_pct",
-                "residual_delay_days", "recovered_within_schedule_pct"
+                "residual_delay_days", "recovered_within_schedule_pct",
             ]].sort_values("disruption_type", ascending=False).copy()
             df_ctx_display.columns = [
                 "Disruption", "Route", "Risk", "Action",
                 "Cases", "Effectiveness (%)", "Cost Premium (%)",
-                "Residual Delay (d)", "On Schedule (%)"
+                "Residual Delay (d)", "On Schedule (%)",
             ]
             st.dataframe(
                 df_ctx_display, hide_index=True, use_container_width=True,
                 column_config={
                     "Effectiveness (%)": st.column_config.ProgressColumn(
                         "Effectiveness (%)", min_value=0, max_value=100, format="%.1f%%"),
+                    "On Schedule (%)": st.column_config.ProgressColumn(
+                        "On Schedule (%)", min_value=0, max_value=100, format="%.1f%%"),
                 }
             )
-
-
 # ═══════════════════════════════════════════════
 # SECCIÓ 6 — Ús d'aire expedit
 # ═══════════════════════════════════════════════
@@ -803,10 +823,10 @@ if not df_air.empty:
     ))
 
     fig_air.update_layout(
-        **base_layout(height=260),
+        **base_layout(height=350),
         xaxis=styled_xaxis(title="% d'enviaments amb Expedited Air Freight", ticksuffix="%"),
         yaxis=styled_yaxis(showgrid=False),
-        margin=dict(l=12, r=280, t=16, b=12),
+        margin=dict(l=12, r=150, t=16, b=12),
     )
     st.plotly_chart(fig_air, use_container_width=True)
     st.caption(

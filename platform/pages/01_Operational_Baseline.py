@@ -711,6 +711,8 @@ with col_heatmap:
             title=dict(text=selected_metric_label, font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1)),
             tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1),
         ),
+        xgap=1,
+        ygap=1,
         hoverongaps=False,
         hovertemplate="<b>%{y} → %{x}</b><br>" + selected_metric_label + ": %{z:.1f}<extra></extra>",
         text=[[f"{v:.1f}" if not pd.isna(v) else "—" for v in row] for row in matrix.values],
