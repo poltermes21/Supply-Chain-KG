@@ -421,7 +421,7 @@ if len(df_mode) >= 2:
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">2 · Distribució del tràfic</div>', unsafe_allow_html=True)
 
-col_left, col_right = st.columns([1, 1])
+col_left, col_right = st.columns([5, 3])
 
 with col_left:
     st.markdown('<div class="section-label">Volum per ruta</div>', unsafe_allow_html=True)
@@ -438,10 +438,10 @@ with col_left:
         textfont=dict(size=10, family=FONT_MONO, color=TEXT_COLOR1),
     ))
     fig_route.update_layout(
-        **base_layout(height=285),
-        xaxis=styled_xaxis(title="Shipments"),
+        **base_layout(height=420),
+        xaxis=styled_xaxis(title="Shipments", range=[0, 6100]),
         yaxis=styled_yaxis(showgrid=False),
-        margin=dict(l=8, r=90, t=10, b=10),
+        margin=dict(l=8, r=10, t=10, b=10),
     )
     st.plotly_chart(fig_route, use_container_width=True)
 
@@ -449,16 +449,16 @@ with col_right:
     st.markdown('<div class="section-label">Perfil per ruta — Lead Time, Cost & Delay (normalitzat)</div>', unsafe_allow_html=True)
     st.caption("Valors normalitzats per comparar perfils relatius entre rutes.")
 
-    cols_norm = ["avg_lead_time_days", "avg_cost_usd", "delay_rate_pct"]
+    cols_norm = ["avg_cost_usd", "avg_delay_days", "delay_rate_pct", "avg_lead_time_days"]
     df_radar = df_route.copy()
     for c in cols_norm:
         df_radar[c + "_norm"] = df_radar[c].rank(pct=True)
 
-    categories = ["Lead Time", "Cost", "Delay Rate"]
+    categories = ["Avg Cost", "Avg Delay", "Delay Rate", "Lead Time"]
     fig_radar = go.Figure()
     palette_radar = ["#1D4ED8", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"]
     for i, (_, row) in enumerate(df_radar.iterrows()):
-        vals = [row["avg_lead_time_days_norm"], row["avg_cost_usd_norm"], row["delay_rate_pct_norm"]]
+        vals = [row["avg_cost_usd_norm"], row["avg_delay_days_norm"], row["delay_rate_pct_norm"], row["avg_lead_time_days_norm"]]
         vals += [vals[0]]
         fig_radar.add_trace(go.Scatterpolar(
             r=vals,
@@ -470,7 +470,7 @@ with col_right:
             name=row["route"],
         ))
     fig_radar.update_layout(
-        **base_layout(height=285),
+        **base_layout(height=350),
         polar=dict(
             bgcolor=TRANSPARENT,
             radialaxis=dict(
@@ -482,7 +482,7 @@ with col_right:
             angularaxis=dict(tickfont=dict(size=11, family=FONT_SANS, color=TEXT_COLOR1)),
         ),
         legend=dict(font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), orientation="h", y=-0.18),
-        margin=dict(l=30, r=30, t=10, b=50),
+        margin=dict(l=30, r=30, t=30, b=50),
     )
     st.plotly_chart(fig_radar, use_container_width=True)
 

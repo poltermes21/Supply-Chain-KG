@@ -422,7 +422,7 @@ with col_radar:
             ))
 
         fig_radar.update_layout(
-            **base_layout(height=420),
+            **base_layout(height=450),
             polar=dict(
                 bgcolor=TRANSPARENT,
                 radialaxis=dict(
