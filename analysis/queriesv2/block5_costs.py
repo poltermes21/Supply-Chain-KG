@@ -28,17 +28,15 @@ class Block5Queries:
     # 5.1 DISRUPTION COST BASELINE
 
     DISRUPTION_COST_BASELINE = """
-        MATCH (o:Order)
-        RETURN
-            o.is_disrupted AS is_disrupted,
-            o.cost_category AS cost_category,
-            count(o) AS total_shipments,
-            round(avg(o.shipping_cost_usd), 2) AS avg_cost_usd,
-            round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
-            round(avg(o.delay_days), 2) AS avg_delay_days,
-            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
-        ORDER BY is_disrupted DESC
-    """
+    MATCH (o:Order)
+    RETURN
+        o.is_disrupted AS is_disrupted,
+        count(o) AS total_shipments,
+        round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
+        round(avg(o.delay_days), 2) AS avg_delay_days,
+        round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
+    ORDER BY is_disrupted DESC
+"""
 
     # 5.2 COST OF DISRUPTION BY TYPE
 

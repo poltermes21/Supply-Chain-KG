@@ -252,13 +252,6 @@ if not df_baseline.empty:
         # Càlcul de mètriques
         m_list = [
             {
-                "label": "Avg Cost",
-                "d_val": f"${d['avg_cost_usd']:,.2f}",
-                "nd_val": f"${nd['avg_cost_usd']:,.2f}",
-                "delta": f"${(d['avg_cost_usd'] - nd['avg_cost_usd']):,.2f}",
-                "color": "#EF4444" if (d['avg_cost_usd'] - nd['avg_cost_usd']) > 0 else "#10B981"
-            },
-            {
                 "label": "Cost vs Baseline",
                 "d_val": f"{d['avg_cost_vs_baseline_pct']:.2f}%",
                 "nd_val": f"{nd['avg_cost_vs_baseline_pct']:.2f}%",

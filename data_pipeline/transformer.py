@@ -202,49 +202,6 @@ class DataTransformer:
         self.transformation_stats['risk_level_distribution'] = risk_counts.to_dict()
         print(f"  Distribution: {risk_counts.to_dict()}")
     
-    def create_cost_category(self):
-        """
-        Categorize Shipping_Cost_USD into cost tiers using quartiles 
-        computed WITHIN each Product_Category.
-        
-        Thresholds per category:
-            - budget: <= Q1 (bottom 25%)
-            - standard: Q1-Q2 (25-50%)
-            - premium: Q2-Q3 (50-75%)
-            - emergency: > Q3 (top 25%) - correlates with disruption response
-        """
-        print("Creating cost_category classification (per product category)...")
-        
-        self.df['cost_category'] = 'unknown'
-        category_thresholds = {}
-        
-        for category in self.df['Product_Category'].unique():
-            mask = self.df['Product_Category'] == category
-            cat_costs = self.df.loc[mask, 'Shipping_Cost_USD']
-            
-            q1 = cat_costs.quantile(0.25)
-            q2 = cat_costs.quantile(0.50)
-            q3 = cat_costs.quantile(0.75)
-            
-            conditions = [
-                cat_costs <= q1,
-                cat_costs <= q2,
-                cat_costs <= q3,
-                cat_costs > q3
-            ]
-            choices = ['budget', 'standard', 'premium', 'emergency']
-            
-            self.df.loc[mask, 'cost_category'] = np.select(conditions, choices, default='unknown')
-            
-            category_thresholds[category] = {
-                'q1_budget': float(q1),
-                'q2_standard': float(q2),
-                'q3_premium': float(q3)
-            }
-            print(f"  {category}: budget<${q1:.0f}, standard<${q2:.0f}, premium<${q3:.0f}")
-        
-        self.transformation_stats['cost_thresholds_by_category'] = category_thresholds
-    
     # 2. BOOLEAN FLAGS
     
     def create_boolean_flags(self):
@@ -326,34 +283,22 @@ class DataTransformer:
         self.df['mitigation_effective'] = self.df['mitigation_effectiveness'].isin(
             ['fully_effective', 'partially_effective']
         )
-
-        self.df['route_segment'] = (
-            self.df['Origin_Region'] + '_to_' + self.df['Destination_Region']
-        )
         
-        # 1. Crear weight buckets
-        self.df['weight_bucket'] = pd.qcut(
-            self.df['Order_Weight_Kg'], 
-            q=4, 
-            labels=False, 
-            duplicates='drop'
-        )
-
-        # 2. Baseline segmentat (només no disruptives)
+        # Baseline segmentat (només no disruptives)
         baseline = (
             self.df[~self.df['is_disrupted']]
             .groupby(['route_segment', 'Transportation_Mode', 'Product_Category'])['Shipping_Cost_USD']
             .median() 
         )
 
-        # 3. Assignar baseline a cada fila
+        # Assignar baseline a cada fila
         self.df = self.df.join(
             baseline,
             on=['route_segment', 'Transportation_Mode', 'Product_Category'],
             rsuffix='_baseline'
         )
 
-        # 4. Cost vs baseline pct
+        # Cost vs baseline pct
         self.df['cost_vs_baseline_pct'] = (
             (self.df['Shipping_Cost_USD'] - self.df['Shipping_Cost_USD_baseline']) /
             self.df['Shipping_Cost_USD_baseline'].replace(0, np.nan)
@@ -437,7 +382,7 @@ class DataTransformer:
         
         Steps:
             0. ID normalization (numeric IDs + disruption_name)
-            1. Classification fields (delay_severity, risk_level, cost_category)
+            1. Classification fields (delay_severity, risk_level)
             2. Boolean flags (is_disrupted, is_delayed)
             3. Efficiency metrics (lead_time_deviation_pct, cost_per_kg, delay_ratio)
             4. Resilience metrics (mitigation_effective, cost_vs_baseline_pct, route_segment)
@@ -459,7 +404,6 @@ class DataTransformer:
         print("\n--- STEP 1: CLASSIFICATION FIELDS ---")
         self.create_delay_severity()
         self.create_risk_level()
-        self.create_cost_category()
         
         print("\n--- STEP 2: BOOLEAN FLAGS ---")
         self.create_boolean_flags()
@@ -523,7 +467,6 @@ class DataTransformer:
             'delay_severity',
             'risk_level',
             'combined_risk_score',
-            'cost_category',
             # Boolean flags
             'is_disrupted',
             'is_delayed',
