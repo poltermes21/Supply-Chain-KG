@@ -14,7 +14,7 @@ Queries:
 """
 
 import pandas as pd
-from analysis.queries.base import run_query
+from analysis.queriesv2.base import run_query
 
 class Block5Queries:
     """
@@ -28,16 +28,15 @@ class Block5Queries:
     # 5.1 DISRUPTION COST BASELINE
 
     DISRUPTION_COST_BASELINE = """
-        MATCH (o:Order)
-        RETURN
-            o.is_disrupted AS is_disrupted,
-            count(o) AS total_shipments,
-            round(avg(o.shipping_cost_usd), 2) AS avg_cost_usd,
-            round(avg(o.cost_premium), 2) AS avg_cost_premium_pct,
-            round(avg(o.delay_days), 2) AS avg_delay_days,
-            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
-        ORDER BY is_disrupted DESC
-    """
+    MATCH (o:Order)
+    RETURN
+        o.is_disrupted AS is_disrupted,
+        count(o) AS total_shipments,
+        round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
+        round(avg(o.delay_days), 2) AS avg_delay_days,
+        round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
+    ORDER BY is_disrupted DESC
+"""
 
     # 5.2 COST OF DISRUPTION BY TYPE
 
@@ -48,10 +47,11 @@ class Block5Queries:
             d.full_name AS disruption_type,
             count(o) AS total_shipments,
             round(avg(o.shipping_cost_usd), 2) AS avg_cost_usd,
-            round(avg(o.cost_premium), 2) AS avg_cost_premium_pct,
+            round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
             round(avg(o.delay_days), 2) AS avg_delay_days,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct,
             round(percentileCont(o.delay_days, 0.95), 2) AS p95_delay_days
-        ORDER BY avg_cost_premium_pct DESC
+        ORDER BY avg_cost_vs_baseline_pct DESC
     """
 
     # 5.3 MITIGATION ACTION SUMMARY
@@ -67,7 +67,8 @@ class Block5Queries:
             sum(CASE WHEN o.mitigation_effectiveness = 'partially_effective' THEN 1 ELSE 0 END) AS partially_effective,
             sum(CASE WHEN o.mitigation_effectiveness = 'not_effective' THEN 1 ELSE 0 END) AS not_effective,
             round(avg(o.delay_days), 2) AS residual_delay_days,
-            round(avg(o.cost_premium), 2) AS avg_cost_premium_pct,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct,
+            round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
             round(100.0 * avg(CASE WHEN o.mitigation_effective THEN 1.0 ELSE 0.0 END), 2) AS effectiveness_rate_pct,
             round(
                 100.0 *
@@ -91,7 +92,8 @@ class Block5Queries:
             sum(CASE WHEN o.mitigation_effectiveness = 'partially_effective' THEN 1 ELSE 0 END) AS partially_effective,
             sum(CASE WHEN o.mitigation_effectiveness = 'not_effective' THEN 1 ELSE 0 END) AS not_effective,
             round(avg(o.delay_days), 2) AS residual_delay_days,
-            round(avg(o.cost_premium), 2) AS avg_cost_premium_pct,
+            round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct,
+            round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
             round(100.0 * avg(CASE WHEN o.mitigation_effective THEN 1.0 ELSE 0.0 END), 2) AS effectiveness_rate_pct,
             round(
                 100.0 *
@@ -119,7 +121,8 @@ class Block5Queries:
             sum(CASE WHEN o.mitigation_effectiveness = 'partially_effective' THEN 1 ELSE 0 END) AS partially_effective,
             sum(CASE WHEN o.mitigation_effectiveness = 'not_effective' THEN 1 ELSE 0 END) AS not_effective,
             avg(o.delay_days) AS residual_delay_days,
-            avg(o.cost_premium) AS avg_cost_premium_pct,
+            avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate,
+            avg(o.cost_vs_baseline_pct) AS avg_cost_vs_baseline_pct,
             avg(CASE WHEN o.mitigation_effective THEN 1.0 ELSE 0.0 END) AS effectiveness_rate,
             avg(CASE WHEN o.actual_lead_time_days <= o.scheduled_lead_time_days THEN 1.0 ELSE 0.0 END) as recovered_within_schedule_rate
         RETURN
@@ -132,7 +135,8 @@ class Block5Queries:
             partially_effective,
             not_effective,
             round(residual_delay_days, 2) AS residual_delay_days,
-            round(avg_cost_premium_pct, 2) AS avg_cost_premium_pct,
+            round(100.0 * delay_rate, 2) AS delay_rate_pct,
+            round(avg_cost_vs_baseline_pct, 2) AS avg_cost_vs_baseline_pct,
             round(100.0 * effectiveness_rate, 2) AS effectiveness_rate_pct,
             round(100.0 * recovered_within_schedule_rate, 2) as recovered_within_schedule_pct
         ORDER BY disruption_type, route, risk_level, effectiveness_rate_pct DESC
@@ -152,7 +156,7 @@ class Block5Queries:
                 100.0 * sum(CASE WHEN ma.name = 'Expedited Air Freight' THEN 1 ELSE 0 END) / toFloat(count(o)),
                 2
             ) AS expedited_air_share_pct,
-            round(avg(CASE WHEN ma.name = 'Expedited Air Freight' THEN o.cost_premium END), 2) AS avg_cost_premium_when_expedited
+            round(avg(CASE WHEN ma.name = 'Expedited Air Freight' THEN o.cost_vs_baseline_pct END), 2) AS avg_cost_vs_baseline_pct_when_expedited
         ORDER BY expedited_air_share_pct DESC
     """
 

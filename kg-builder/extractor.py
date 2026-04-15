@@ -44,10 +44,10 @@ class KGExtractor:
             'Base_Lead_Time_Days', 'Scheduled_Lead_Time_Days',
             'Actual_Lead_Time_Days', 'Delay_Days',
             'Shipping_Cost_USD', 'Order_Weight_Kg',
-            'Delivery_Status', 'cost_category',
+            'Delivery_Status',
             'is_delayed', 'is_disrupted',
-            'delay_severity', 'lead_time_efficiency',
-            'cost_per_kg', 'delay_ratio', 'cost_premium',
+            'delay_severity', 'lead_time_deviation_pct',
+            'cost_per_kg', 'delay_ratio', 'cost_vs_baseline_pct',
             'mitigation_effectiveness', 'mitigation_effective'
         ]
 
@@ -63,14 +63,13 @@ class KGExtractor:
                 'shipping_cost_usd':        round(float(row['Shipping_Cost_USD']), 2),
                 'order_weight_kg':          int(row['Order_Weight_Kg']),
                 'delivery_status':          row['Delivery_Status'],
-                'cost_category':            row['cost_category'],
                 'is_delayed':               bool(row['is_delayed']),
                 'is_disrupted':             bool(row['is_disrupted']),
                 'delay_severity':           row['delay_severity'],
-                'lead_time_efficiency':     round(float(row['lead_time_efficiency']), 2),
+                'lead_time_deviation_pct':  round(float(row['lead_time_deviation_pct']), 2),
                 'cost_per_kg':              round(float(row['cost_per_kg']), 2),
                 'delay_ratio':              round(float(row['delay_ratio']), 2),
-                'cost_premium':             round(float(row['cost_premium']), 2),
+                'cost_vs_baseline_pct':     round(float(row['cost_vs_baseline_pct']), 2),
                 'mitigation_effectiveness': row['mitigation_effectiveness'],   # ← nou
                 'mitigation_effective':     bool(row['mitigation_effective'])
             })

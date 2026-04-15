@@ -12,7 +12,7 @@ Queries:
 """
 
 import pandas as pd
-from analysis.queries.base import run_query
+from analysis.queriesv2.base import run_query
 
 class Block1Queries:
     """
@@ -35,7 +35,7 @@ class Block1Queries:
             round(percentileCont(o.actual_lead_time_days, 0.95), 2) AS p95_actual_lead_time_days,
             round(avg(o.shipping_cost_usd), 2) AS avg_shipping_cost_usd,
             round(percentileCont(o.shipping_cost_usd, 0.95), 2) AS p95_shipping_cost_usd,
-            round(avg(o.lead_time_efficiency), 2) AS avg_lead_time_efficiency,
+            round(avg(o.lead_time_deviation_pct), 2) AS avg_lead_time_deviation_pct,
             round(avg(o.cost_per_kg), 2) AS avg_cost_per_kg
     """
 
@@ -50,6 +50,8 @@ class Block1Queries:
             total_orders,
             count(o) AS total_shipments,
             avg(o.actual_lead_time_days) AS avg_lead_time,
+            avg(o.shipping_cost_usd) AS avg_cost,
+            avg(o.delay_days) AS avg_delay_days,
             avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate
 
         RETURN
@@ -57,6 +59,8 @@ class Block1Queries:
             total_shipments,
             round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total,
             round(avg_lead_time, 2) AS avg_lead_time_days,
+            round(avg_cost, 2) AS avg_cost_usd,
+            round(avg_delay_days, 2) AS avg_delay_days,
             round(100.0 * delay_rate, 2) AS delay_rate_pct
         ORDER BY total_shipments DESC
     """
@@ -104,6 +108,19 @@ class Block1Queries:
             round(100.0 * delay_rate, 2) AS delay_rate_pct
         ORDER BY total_shipments DESC
     """
+    
+    # 1.4. PRODUCT DISTRIBUTION
+    
+    PRODUCT_DISTRIBUTION = """
+        MATCH (o:Order)-[:TRANSPORTS]->(p:ProductCategory),
+            (o)-[:SHIPPED_VIA]->(r:Route)
+        WITH r.id AS route,
+            p.name AS product,
+            count(o) AS total_shipments
+        RETURN route, product, total_shipments
+        ORDER BY route, total_shipments DESC
+    """
+    
 
     # 1.3 DELAY SEVERITY DISTRIBUTION
 
@@ -153,6 +170,32 @@ class Block1Queries:
             round(f.avg_lead_time_days, 2) AS avg_lead_time_days
         ORDER BY f.route_count ASC, f.primary_route_share_pct DESC, f.shipments DESC
     """
+    
+    # 1.5 TEMPORAL TREND
+    
+    TEMPORAL_TREND = """
+        MATCH (o:Order)
+        WITH date(o.order_date) AS date,
+            o.is_delayed as is_delayed,
+            o.is_delayed as is_disrupted,
+            o.shipping_cost_usd as cost
+
+        WITH 
+            date.year AS year,
+            date.month AS month,
+            count(*) AS total_orders,
+            avg(CASE WHEN is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate,
+            avg(cost) as avg_cost
+
+        RETURN
+            year,
+            month,
+            total_orders,
+            round(100.0 * delay_rate, 2) AS delay_rate_pct,
+            round(avg_cost, 2) as avg_cost
+        ORDER BY year, month
+    """
+    
 
     # EXECUTION METHODS
 
@@ -173,12 +216,20 @@ class Block1Queries:
         return run_query(driver, Block1Queries.SHIPMENTS_BY_PRODUCT_CATEGORY)
 
     @staticmethod
+    def product_distribution(driver) -> pd.DataFrame:
+        return run_query(driver, Block1Queries.PRODUCT_DISTRIBUTION)
+    
+    @staticmethod
     def delay_severity_distribution(driver) -> pd.DataFrame:
         return run_query(driver, Block1Queries.DELAY_SEVERITY_DISTRIBUTION)
 
     @staticmethod
     def od_redundancy_profile(driver) -> pd.DataFrame:
         return run_query(driver, Block1Queries.OD_REDUNDANCY_PROFILE)
+    
+    @staticmethod
+    def temporal_trend(driver) -> pd.DataFrame:
+        return run_query(driver, Block1Queries.TEMPORAL_TREND)
 
     @staticmethod
     def run_all(driver) -> dict:
@@ -189,10 +240,12 @@ class Block1Queries:
             Dictionary of pandas DataFrames
         """
         return {
-            "global_baseline_kpis":       Block1Queries.global_baseline_kpis(driver),
-            "shipments_by_route":         Block1Queries.shipments_by_route(driver),
-            "shipments_by_transport_mode": Block1Queries.shipments_by_transport_mode(driver),
-            "shipments_by_product":       Block1Queries.shipments_by_product_category(driver),
-            "delay_severity_distribution": Block1Queries.delay_severity_distribution(driver),
-            "od_redundancy_profile":      Block1Queries.od_redundancy_profile(driver),
+            "global_baseline_kpis":         Block1Queries.global_baseline_kpis(driver),
+            "shipments_by_route":           Block1Queries.shipments_by_route(driver),
+            "shipments_by_transport_mode":  Block1Queries.shipments_by_transport_mode(driver),
+            "shipments_by_product":         Block1Queries.shipments_by_product_category(driver),
+            "product_distribution":         Block1Queries.product_distribution(driver),
+            "delay_severity_distribution":  Block1Queries.delay_severity_distribution(driver),
+            "od_redundancy_profile":        Block1Queries.od_redundancy_profile(driver),
+            "temporal_trend":               Block1Queries.temporal_trend(driver),
         }

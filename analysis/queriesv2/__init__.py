@@ -1,30 +1,35 @@
 """
-queries/__init__.py
+queriesv2/__init__.py
 ===================
 Punt d'entrada centralitzat per a totes les consultes d'anàlisi.
 
 Ús des de la app Streamlit:
-    from analysis.queries import Bloc1Queries
-    from analysis.queries import Bloc1Queries, Bloc2Queries   # múltiples
-    from analysis.queries.base import get_driver, run_query   # utilitats
+    from analysis.queriesv2 import Bloc1kQueries
+    from analysis.queriesv2 import Bloc1kQueries, Bloc2Qkueries   # múltiples
+    from analysis.queriesv2.base import get_driver, run_query   # utilitats
 
 Ús per executar tots els blocs:
-    from analysis.queries import Bloc1Queries
-    data = Bloc1Queries.run_all(driver)
+    from analysis.queriesv2 import Bloc1Queries
+    data = Bloc1kQueries.run_all(driver)
 """
 
-from analysis.queries.base import get_driver, run_query
+from analysis.queriesv2.base import get_driver, run_query
 
-from analysis.queries.block1_operational import Block1Queries
+from analysis.queriesv2.block1_operational import Block1Queries
+from analysis.queriesv2.block2_risk import Block2Queries
+from analysis.queriesv2.block3_vulnerability import Block3Queries
+from analysis.queriesv2.block4_geography import Block4Queries
+from analysis.queriesv2.block5_costs import Block5Queries
+from analysis.queriesv2.block6_what_if import Block6Queries
 
 
 __all__ = [
     "get_driver",
     "run_query",
-    "Bloc1Queries",
-    "Bloc2Queries",
-    "Bloc3Queries",
-    "Bloc4Queries",
-    "Bloc5Queries",
-    "Bloc6Queries",
+    "Block1Queries",
+    "Block2Queries",
+    "Block3Queries",
+    "Block4Queries",
+    "Block5Queries",
+    "Block6Queries",
 ]

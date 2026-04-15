@@ -156,10 +156,10 @@ class DataTransformer:
         
         conditions = [
             self.df['Delay_Days'] == 0,
-            self.df['Delay_Days'] <= 3,
+            self.df['Delay_Days'] <= 2,
+            self.df['Delay_Days'] <= 4,
             self.df['Delay_Days'] <= 7,
-            self.df['Delay_Days'] <= 14,
-            self.df['Delay_Days'] > 14
+            self.df['Delay_Days'] > 7
         ]
         choices = ['none', 'minor', 'moderate', 'severe', 'critical']
         
@@ -202,49 +202,6 @@ class DataTransformer:
         self.transformation_stats['risk_level_distribution'] = risk_counts.to_dict()
         print(f"  Distribution: {risk_counts.to_dict()}")
     
-    def create_cost_category(self):
-        """
-        Categorize Shipping_Cost_USD into cost tiers using quartiles 
-        computed WITHIN each Product_Category.
-        
-        Thresholds per category:
-            - budget: <= Q1 (bottom 25%)
-            - standard: Q1-Q2 (25-50%)
-            - premium: Q2-Q3 (50-75%)
-            - emergency: > Q3 (top 25%) - correlates with disruption response
-        """
-        print("Creating cost_category classification (per product category)...")
-        
-        self.df['cost_category'] = 'unknown'
-        category_thresholds = {}
-        
-        for category in self.df['Product_Category'].unique():
-            mask = self.df['Product_Category'] == category
-            cat_costs = self.df.loc[mask, 'Shipping_Cost_USD']
-            
-            q1 = cat_costs.quantile(0.25)
-            q2 = cat_costs.quantile(0.50)
-            q3 = cat_costs.quantile(0.75)
-            
-            conditions = [
-                cat_costs <= q1,
-                cat_costs <= q2,
-                cat_costs <= q3,
-                cat_costs > q3
-            ]
-            choices = ['budget', 'standard', 'premium', 'emergency']
-            
-            self.df.loc[mask, 'cost_category'] = np.select(conditions, choices, default='unknown')
-            
-            category_thresholds[category] = {
-                'q1_budget': float(q1),
-                'q2_standard': float(q2),
-                'q3_premium': float(q3)
-            }
-            print(f"  {category}: budget<${q1:.0f}, standard<${q2:.0f}, premium<${q3:.0f}")
-        
-        self.transformation_stats['cost_thresholds_by_category'] = category_thresholds
-    
     # 2. BOOLEAN FLAGS
     
     def create_boolean_flags(self):
@@ -274,15 +231,15 @@ class DataTransformer:
         Create efficiency and performance metrics for Order nodes.
         
         Metrics created:
-            - lead_time_efficiency (%): (Scheduled - Actual) / Scheduled * 100
+            - lead_time_deviation_pct (%): (Scheduled - Actual) / Scheduled * 100
             - cost_per_kg (USD/kg): Shipping_Cost_USD / Order_Weight_Kg
             - delay_ratio (%): Delay_Days / Scheduled_Lead_Time_Days * 100
         """
         print("Creating efficiency metrics...")
         
-        self.df['lead_time_efficiency'] = (
-            (self.df['Scheduled_Lead_Time_Days'] - self.df['Actual_Lead_Time_Days']) / 
-            self.df['Scheduled_Lead_Time_Days'] * 100
+        self.df['lead_time_deviation_pct'] = (
+            (self.df['Actual_Lead_Time_Days'] - self.df['Scheduled_Lead_Time_Days']) / 
+            self.df['Actual_Lead_Time_Days'] * 100
         ).round(2)
         
         self.df['cost_per_kg'] = (
@@ -293,7 +250,7 @@ class DataTransformer:
             self.df['Delay_Days'] / self.df['Scheduled_Lead_Time_Days'] * 100
         ).round(2)
         
-        print(f"  lead_time_efficiency: mean={self.df['lead_time_efficiency'].mean():.2f}%")
+        print(f"  lead_time_deviation_pct: mean={self.df['lead_time_deviation_pct'].mean():.2f}%")
         print(f"  cost_per_kg: mean=${self.df['cost_per_kg'].mean():.2f}")
         print(f"  delay_ratio: mean={self.df['delay_ratio'].mean():.2f}%")
     
@@ -304,7 +261,7 @@ class DataTransformer:
         Metrics created:
             - mitigation_effectiveness (str): 4-level classification of mitigation outcome
             - mitigation_effective (bool): True if fully or partially effective
-            - cost_premium (%): (cost - avg_normal_cost) / avg_normal_cost * 100
+            - cost_vs_baseline_pct (%): (cost - avg_normal_cost) / avg_normal_cost * 100
             - route_segment (str): "{Origin_Region}_to_{Destination_Region}"
         """
         print("Creating resilience metrics...")
@@ -326,38 +283,26 @@ class DataTransformer:
         self.df['mitigation_effective'] = self.df['mitigation_effectiveness'].isin(
             ['fully_effective', 'partially_effective']
         )
-
-        self.df['route_segment'] = (
-            self.df['Origin_Region'] + '_to_' + self.df['Destination_Region']
-        )
         
-                # 1. Crear weight buckets
-        self.df['weight_bucket'] = pd.qcut(
-            self.df['Order_Weight_Kg'], 
-            q=4, 
-            labels=False, 
-            duplicates='drop'
-        )
-
-        # 2. Baseline segmentat (només no disruptives)
+        # Baseline segmentat (només no disruptives)
         baseline = (
             self.df[~self.df['is_disrupted']]
-            .groupby(['route_segment', 'Transportation_Mode', 'weight_bucket'])['Shipping_Cost_USD']
+            .groupby(['route_segment', 'Transportation_Mode', 'Product_Category'])['Shipping_Cost_USD']
             .median() 
         )
 
-        # 3. Assignar baseline a cada fila
+        # Assignar baseline a cada fila
         self.df = self.df.join(
             baseline,
-            on=['route_segment', 'Transportation_Mode', 'weight_bucket'],
+            on=['route_segment', 'Transportation_Mode', 'Product_Category'],
             rsuffix='_baseline'
         )
 
-        # 4. Cost premium
-        self.df['cost_premium'] = (
+        # Cost vs baseline pct
+        self.df['cost_vs_baseline_pct'] = (
             (self.df['Shipping_Cost_USD'] - self.df['Shipping_Cost_USD_baseline']) /
-            self.df['Shipping_Cost_USD_baseline'] * 100
-        )
+            self.df['Shipping_Cost_USD_baseline'].replace(0, np.nan)
+        ) * 100
 
         self.transformation_stats['resilience'] = {
             'mitigation_effectiveness_distribution': self.df['mitigation_effectiveness'].value_counts().to_dict(),
@@ -367,7 +312,7 @@ class DataTransformer:
 
         print(f"  Effectiveness distribution: {self.df['mitigation_effectiveness'].value_counts().to_dict()}")
         print(f"  Effective mitigations (fully + partially): {self.df['mitigation_effective'].sum()}")
-        print(f"  Avg cost premium disrupted orders: {self.df[self.df['is_disrupted']]['cost_premium'].mean():.2f}%")
+        print(f"  Avg cost vs baseline pct orders: {self.df[self.df['is_disrupted']]['cost_vs_baseline_pct'].mean():.2f}%")
     
     # 4. ENTITY PREPARATION
     
@@ -437,10 +382,10 @@ class DataTransformer:
         
         Steps:
             0. ID normalization (numeric IDs + disruption_name)
-            1. Classification fields (delay_severity, risk_level, cost_category)
+            1. Classification fields (delay_severity, risk_level)
             2. Boolean flags (is_disrupted, is_delayed)
-            3. Efficiency metrics (lead_time_efficiency, cost_per_kg, delay_ratio)
-            4. Resilience metrics (mitigation_effective, cost_premium, route_segment)
+            3. Efficiency metrics (lead_time_deviation_pct, cost_per_kg, delay_ratio)
+            4. Resilience metrics (mitigation_effective, cost_vs_baseline_pct, route_segment)
             5. Risk assessment ID (assessment_id)
             6. Entity validation (presence and null check for all KG node columns)
         """
@@ -459,7 +404,6 @@ class DataTransformer:
         print("\n--- STEP 1: CLASSIFICATION FIELDS ---")
         self.create_delay_severity()
         self.create_risk_level()
-        self.create_cost_category()
         
         print("\n--- STEP 2: BOOLEAN FLAGS ---")
         self.create_boolean_flags()
@@ -523,18 +467,17 @@ class DataTransformer:
             'delay_severity',
             'risk_level',
             'combined_risk_score',
-            'cost_category',
             # Boolean flags
             'is_disrupted',
             'is_delayed',
             # Efficiency metrics
-            'lead_time_efficiency',
+            'lead_time_deviation_pct',
             'cost_per_kg',
             'delay_ratio',
             # Resilience metrics
             'mitigation_effectiveness'
             'mitigation_effective',
-            'cost_premium',
+            'cost_vs_baseline_pct',
             'route_segment',
             # Entity IDs
             'assessment_id',

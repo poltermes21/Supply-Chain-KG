@@ -14,7 +14,7 @@ Queries:
 """
 
 import pandas as pd
-from analysis.queries.base import run_query
+from analysis.queriesv2.base import run_query
 
 class Block2Queries:
     """
@@ -136,6 +136,7 @@ class Block2Queries:
             avg(ra.combined_risk_score) AS avg_risk,
             avg(o.delay_days) AS avg_delay,
             avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END) AS disruption_rate,
+            avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate,
             collect(DISTINCT coalesce(d.full_name, 'No disruption')) AS disruption_types
 
         RETURN
@@ -144,7 +145,8 @@ class Block2Queries:
             total_shipments,
             round(avg_risk, 4) AS avg_combined_risk_score,
             round(avg_delay, 2) AS avg_delay_days,
-            round(100.0 * disruption_rate, 2) AS disruption_rate_pct
+            round(100.0 * disruption_rate, 2) AS disruption_rate_pct,
+            round(100.0 * delay_rate, 2) AS delay_rate_pct
         ORDER BY total_shipments DESC
     """
 
@@ -187,14 +189,14 @@ class Block2Queries:
         return run_query(driver, Block2Queries.OUTBOUND_CITY_RISK_EXPOSURE)
 
     @staticmethod
-    def joint_risk_exposure(driver, 
-                            geo_threshold: float = 0.6,
-                            weather_threshold: float = 0.6) -> pd.DataFrame:
+    def joint_risk_exposure(driver, geo_threshold: float, weather_threshold: float) -> pd.DataFrame:
         return run_query(
             driver, 
             Block2Queries.JOINT_RISK_EXPOSURE,
-            geo_threshold=geo_threshold,
-            weather_threshold=weather_threshold
+            params={
+                "geo_threshold": geo_threshold,
+                "weather_threshold": weather_threshold
+            }
         )
 
     @staticmethod

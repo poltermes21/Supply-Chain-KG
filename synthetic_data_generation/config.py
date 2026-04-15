@@ -94,7 +94,7 @@ DELAY_BY_DISRUPTION = {
 
 MITIGATION_REDUCTION = {
     "Standard Shipping":     0.00,
-    "Re-routing":            0.35,
+    "Re-routing":            0.25,
     "Expedited Air Freight": 0.55,
 }
 
@@ -142,10 +142,10 @@ DISRUPTION_TYPES = {
 
 ANTICIPATION_FACTOR = {
     "No_Disruption":                           0.0,
-    "Port Congestion":                         0.70,
-    "Severe Weather (Typhoon/Storm)":          0.50,
-    "Severe Weather (Cape Storms)":            0.50,
-    "Geopolitical Conflict (Route Diversion)": 0.10,
+    "Port Congestion":                         0.50,
+    "Severe Weather (Typhoon/Storm)":          0.40,
+    "Severe Weather (Cape Storms)":            0.40,
+    "Geopolitical Conflict (Route Diversion)": 0.25,
 }
 
 RISK_DISRUPTION_MULTIPLIER = {
@@ -255,7 +255,7 @@ MITIGATION_BY_DISRUPTION = {
         "Standard Shipping": 1.00,
     },
     "Port Congestion": {
-        "Standard Shipping":     0.55,
+        "Standard Shipping":     0.60,
         "Re-routing":            0.25,
         "Expedited Air Freight": 0.15,
         
