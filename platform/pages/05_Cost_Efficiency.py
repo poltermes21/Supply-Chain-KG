@@ -329,6 +329,7 @@ if not df_by_type.empty:
                     f"<b>{row['disruption_type']}</b><br>"
                     f"Cost vs Baseline: {row['avg_cost_vs_baseline_pct']:.2f}%<br>"
                     f"Avg Delay: {row['avg_delay_days']:.2f}d<br>"
+                    f"Delay rate: {row['delay_rate_pct']:.2f}%<br>"
                     f"P95 Delay: {row['p95_delay_days']:.2f}d<br>"
                     f"Shipments: {int(row['total_shipments']):,}"
                     "<extra></extra>"

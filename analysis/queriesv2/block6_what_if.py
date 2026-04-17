@@ -279,11 +279,11 @@ class Block6Queries:
         )
 
     @staticmethod
-    def node_failure_local_impact(driver, blocked_city: str) -> pd.DataFrame:
+    def node_failure_local_impact(driver, blocked_cities: List[str]) -> pd.DataFrame:
         return Block6Queries._run_query_with_params(
             driver,
             Block6Queries.NODE_FAILURE_LOCAL_IMPACT,
-            blocked_city=blocked_city
+            blocked_cities=blocked_cities
         )
         
     @staticmethod
@@ -333,11 +333,10 @@ class Block6Queries:
     def run_scenario_pack(
         driver,
         blocked_routes: Optional[List[str]] = None,
-        blocked_city: Optional[str] = None,
+        blocked_cities: Optional[List[str]] = None,
         source_city: Optional[str] = None,
         target_city: Optional[str] = None,
         weight_property: str = "avg_lead_time_days",
-        blocked_cities: Optional[List[str]] = None
     ) -> dict:
         """
         Run a scenario-oriented pack of Block 6 queries.
@@ -361,7 +360,7 @@ class Block6Queries:
             results["route_shock_penalty_estimate"] = Block6Queries.route_shock_penalty_estimate(driver, blocked_routes)
 
         if blocked_cities:
-            results["node_failure_local_impact"] = Block6Queries.node_failure__local_impact(driver, blocked_cities=blocked_cities)
+            results["node_failure_local_impact"] = Block6Queries.node_failure_local_impact(driver, blocked_cities=blocked_cities)
             
         if blocked_cities:
             results["node_failure_global_impact"] = Block6Queries.node_failure_global_impact(driver,blocked_cities=blocked_cities)
