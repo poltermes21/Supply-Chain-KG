@@ -57,26 +57,32 @@ class Block6Queries:
     # 6.1 ROUTE-SHOCK OVERVIEW
 
     ROUTE_SHOCK_OVERVIEW = """
-        MATCH (o_all:Order)
-        WITH count(o_all) AS total_orders
+        MATCH (o:Order)-[:SHIPPED_VIA]->(:Route)
+        WITH count(o) AS total_orders
 
-        MATCH (o:Order)-[:SHIPPED_VIA]->(r:Route)
-        WHERE r.id IN $blocked_routes
+        MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
+        WITH
+            total_orders,
+            f,
+            [r IN f.routes_used WHERE r IN $blocked_routes] AS blocked_hits
 
-        WITH total_orders,
-            count(o) AS affected_shipments,
-            avg(o.shipping_cost_usd) AS avg_cost,
-            avg(o.actual_lead_time_days) AS avg_lead_time,
-            avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END) AS disruption_rate
+        WHERE size(blocked_hits) > 0
+
+        WITH
+            total_orders,
+            f,
+            size(blocked_hits) AS blocked_route_count,
+            size(f.routes_used) AS total_routes
+
+        WITH
+            total_orders,
+            sum(f.shipments) AS affected_shipments
 
         RETURN
             $blocked_routes AS blocked_routes,
             affected_shipments,
-            round(100.0 * affected_shipments / toFloat(total_orders), 2) AS pct_total_network,
-            round(avg_cost, 2) AS avg_cost_usd,
-            round(avg_lead_time, 2) AS avg_lead_time_days,
-            round(100.0 * disruption_rate, 2) AS current_disruption_rate_pct
-    """
+            round(100.0 * affected_shipments / toFloat(total_orders), 2) AS pct_total_network
+    """   
 
     # 6.2 ROUTE-SHOCK REROUTABILITY
 
@@ -91,15 +97,14 @@ class Block6Queries:
             orig.id AS origin,
             dest.id AS destination,
             f.shipments AS affected_shipments,
-            blocked_hits AS blocked_routes_hit,
-            surviving_routes AS surviving_routes,
+            size(blocked_hits) AS blocked_route_count,
             size(surviving_routes) AS surviving_route_count,
-            f.primary_route AS primary_route,
-            round(f.primary_route_share_pct, 2) AS primary_route_share_pct,
+            size(f.routes_used) AS total_routes,
+            100.0 * size(blocked_hits) / size(f.routes_used) AS blocked_pct,
             CASE
-                WHEN size(surviving_routes) = 0 THEN 'stranded'
-                WHEN f.primary_route IN $blocked_routes THEN 'needs_rerouting'
-                ELSE 'partially_hedged'
+                WHEN size(surviving_routes) = 0 THEN 'fully_blocked'
+                WHEN f.primary_route IN $blocked_routes THEN 'primary_loss'
+                ELSE 'partial_loss'
             END AS shock_status
         ORDER BY surviving_route_count ASC, affected_shipments DESC
     """
@@ -112,7 +117,7 @@ class Block6Queries:
             (o)-[:SHIPPED_VIA]->(r:Route)
         WHERE r.id IN $blocked_routes
         WITH
-            orig, dest,
+            orig, dest, r,
             count(o) AS affected_shipments,
             avg(o.shipping_cost_usd) AS base_cost,
             avg(o.actual_lead_time_days) AS base_lead
@@ -121,20 +126,19 @@ class Block6Queries:
                     (alt)-[:SHIPPED_VIA]->(alt_r:Route)
         WHERE NOT alt_r.id IN $blocked_routes
         WITH
-            orig, dest, affected_shipments, base_cost, base_lead,
-            [route IN collect(DISTINCT alt_r.id) WHERE route IS NOT NULL] AS alt_routes,
+            orig, dest, r, affected_shipments, base_cost, base_lead, alt_r,
             avg(alt.shipping_cost_usd) AS alt_cost,
             avg(alt.actual_lead_time_days) AS alt_lead
         RETURN
             orig.id AS origin,
             dest.id AS destination,
+            r.id as blocked_route,
             affected_shipments,
-            alt_routes AS observed_alternative_routes,
-            size(alt_routes) AS observed_alt_route_count,
-            CASE
-                WHEN size(alt_routes) = 0 THEN 'no_observed_alternative'
+            CASE 
+                WHEN alt_r IS NULL THEN 'no_observed_alternative'
                 ELSE 'reroutable_from_history'
             END AS rerouting_feasibility,
+            alt_r.id AS alternative_route,
             CASE WHEN alt_cost IS NULL THEN NULL ELSE round(alt_cost - base_cost, 2) END AS est_cost_delta_usd,
             CASE WHEN alt_lead IS NULL THEN NULL ELSE round(alt_lead - base_lead, 2) END AS est_lead_delta_days
         ORDER BY affected_shipments DESC

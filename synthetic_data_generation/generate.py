@@ -150,14 +150,15 @@ def assign_times(route: str, mode: str, disruption: str) -> tuple:
     """
     Clean separation of concerns:
 
-    base_lt   : deterministic geography (sampled once from route range)
-    sched     : base + small operational friction buffer only
-                Does NOT include any disruption anticipation.
-                Represents what a planner would schedule in normal conditions.
-    actual    : base + stochastic disruption effect
-                All uncertainty lives here. Disruption is the main driver.
+    base_lt   : Deterministic geography (sampled once from route range).
+    sched     : Adjusted baseline. Includes operational friction AND 
+                weighted anticipation of the specific disruption.
+                Represents a risk-adjusted schedule.
+    actual    : base + stochastic disruption effect (mitigated if applicable).
+                The real-world outcome including random variance.
     delay     : max(0, actual - sched)
-                Positive when disruption pushes actual beyond the friction buffer.
+                Positive only if the disruption exceeds the buffered 
+                and anticipated time.
     """
     cfg     = LEAD_TIME[route][mode]
     base_lt = int(rng.integers(cfg["base"][0], cfg["base"][1] + 1))
@@ -177,13 +178,9 @@ def assign_times(route: str, mode: str, disruption: str) -> tuple:
 
     actual = base_lt + real_extra
 
-    # scheduled: petit buffer operatiu + anticipació parcial de la disrupció
-    # Els dos conceptes sumen perquè representen coses diferents:
-    # buffer → friction normal sempre present
-    # anticipació → replanificació específica quan es coneix la disrupció
     ant           = ANTICIPATION_FACTOR[disruption]
-    buffer_days   = base_lt * cfg["buffer"]          # petit (5-10%)
-    expected_days = d_cfg["mean"] * ant               # disruption-specific
+    buffer_days   = base_lt * cfg["buffer"]
+    expected_days = d_cfg["mean"] * ant         
     sched = int(round(base_lt + buffer_days + expected_days))
 
     delay  = max(0, actual - sched)
@@ -232,7 +229,7 @@ def assign_cost(route: str, mode: str, product: str,
     return round(base * mode_mult * prod_mult * weight_sc * mit_mult * noise, 2)
 
 
-# ── MAIN GENERATION LOOP ──────────────────────────────────────────────────────
+# MAIN GENERATION LOOP
 
 def generate_dataset(n: int = N_ORDERS) -> pd.DataFrame:
     """
@@ -286,9 +283,6 @@ def generate_dataset(n: int = N_ORDERS) -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
     return df.sample(frac=1, random_state=SEED).reset_index(drop=True)
-
-
-# ENTRY POINT
 
 if __name__ == "__main__":
     df = generate_dataset()
