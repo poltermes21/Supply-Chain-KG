@@ -160,7 +160,7 @@ class Block2Queries:
             f.shipments AS shipments,
             round(f.avg_combined_risk_score, 4) AS avg_combined_risk_score,
             round(f.disrupted_rate_pct, 2) AS disrupted_rate_pct,
-            round(f.delay_rate_pct, 2) AS delay_rate_pct,
+            round(f.delay_rate_pct, 2) AS delay_rate_pct
         ORDER BY avg_combined_risk_score DESC, disrupted_rate_pct DESC, shipments DESC
     """
 

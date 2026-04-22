@@ -22,6 +22,15 @@ TEXT_COLOR1  = "#E5E7EB"
 TEXT_COLOR2 = "#1A1D27"
 TRANSPARENT = "rgba(0,0,0,0)"
 
+ROUTE_COLORS = {
+    "Suez": "#1D4ED8",
+    "Pacific": "#10B981", 
+    "Intra-Asia": "#F59E0B",
+    "CoGH": "#EF4444",
+    "Atlantic": "#8B5CF6"
+}
+DEFAULT_ROUTE_COLOR = "#6B7280"
+
 def base_layout(**kwargs):
     defaults = dict(
         paper_bgcolor=TRANSPARENT,
@@ -59,7 +68,7 @@ def styled_yaxis(**kwargs):
     return d
 
 # ─────────────────────────────────────────────
-# CSS — force light mode + IBM Plex typography
+# CSS
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -117,10 +126,16 @@ h1, h2, h3 {
     padding: 0.9rem 1.1rem;
     margin-bottom: 0.4rem;
     border-left-width: 3px;
+    min-height: 115px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
 }
 .kpi-neutral { border-left-color: #4B5563; }
 .kpi-ok      { border-left-color: #10B981; }
 .kpi-alert   { border-left-color: #EF4444; }
+.kpi-orange { border-left-color: #F59E0B; }
+.kpi-blue   { border-left-color: #3B82F6; }
 
 .kpi-label {
     font-family: 'IBM Plex Mono', monospace;
@@ -456,18 +471,22 @@ with col_right:
 
     categories = ["Avg Cost", "Avg Delay", "Delay Rate", "Lead Time"]
     fig_radar = go.Figure()
-    palette_radar = ["#1D4ED8", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"]
-    for i, (_, row) in enumerate(df_radar.iterrows()):
-        vals = [row["avg_cost_usd_norm"], row["avg_delay_days_norm"], row["delay_rate_pct_norm"], row["avg_lead_time_days_norm"]]
+    for _, row in df_radar.iterrows():
+        route_name = row["route"]
+        current_color = ROUTE_COLORS.get(route_name, DEFAULT_ROUTE_COLOR)
+        
+        vals = [row["avg_cost_usd_norm"], row["avg_delay_days_norm"], 
+                row["delay_rate_pct_norm"], row["avg_lead_time_days_norm"]]
         vals += [vals[0]]
+        
         fig_radar.add_trace(go.Scatterpolar(
             r=vals,
             theta=categories + [categories[0]],
             fill="toself",
-            fillcolor=palette_radar[i % len(palette_radar)],
+            fillcolor=current_color,
             opacity=0.3,
-            line=dict(color=palette_radar[i % len(palette_radar)], width=2),
-            name=row["route"],
+            line=dict(color=current_color, width=2),
+            name=route_name,
         ))
     fig_radar.update_layout(
         **base_layout(height=350),
@@ -673,26 +692,65 @@ with col_scatter:
 # SECCIÓ 4 — Resiliència de les lanes OD
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">4 · Resiliència de les lanes OD</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">4 · OD Lane Resilience</div>', unsafe_allow_html=True)
 
+# ── Parse route_share JSON ──────────────────────────────────────────────────
+import json as _json
+
+def _parse_route_share(val):
+    if isinstance(val, dict):
+        return val
+    try:
+        return _json.loads(val)
+    except Exception:
+        return {}
+
+df_od["_route_share"] = df_od["route_share"].apply(_parse_route_share)
+
+# ── KPI strip ───────────────────────────────────────────────────────────────
+single   = (df_od["redundancy_profile"] == "single_route").sum()
+high_con = (df_od["redundancy_profile"] == "highly_concentrated").sum()
+mod_con  = (df_od["redundancy_profile"] == "moderately_concentrated").sum()
+diversif = (df_od["redundancy_profile"] == "well_diversified").sum()
+avg_conc = df_od["route_concentration"].mean()
+
+k1, k2, k3, k4, k5 = st.columns(5)
+
+kpi_od_data = [
+    (k1, "Single-Route Lanes",      f"{single}",        "No alternative routing","kpi-alert"),
+    (k2, "Highly Concentrated",     f"{high_con}",      "Main route >70% of ship.","kpi-orange"),
+    (k3, "Moderately Concentrated", f"{mod_con}",       "Main route 40–70% of ship.","kpi-blue"),
+    (k4, "Well Diversified",        f"{diversif}",      "Route concentration <40%","kpi-ok"),
+    (k5, "Avg Route Concentration", f"{avg_conc:.2f}",  "Herfindahl-style index","kpi-neutral"),
+]
+
+for col, label, value, sub, css_class in kpi_od_data:
+    with col:
+        st.markdown(f"""
+        <div class="kpi-card {css_class}">
+            <div class="kpi-label">{label}</div>
+            <div class="kpi-value">{value}</div>
+            <div class="kpi-sub">{sub}</div>
+        </div>""", unsafe_allow_html=True)
+
+st.markdown("")
+
+# ── Controls ────────────────────────────────────────────────────────────────
 metric_options = {
-    "Total shipments":         "shipments",
-    "Route Concentration (%)": "primary_route_share_pct",
+    "Total Shipments":         "shipments",
+    "Route Concentration":     "route_concentration",
     "Delay Rate (%)":          "delay_rate_pct",
     "Avg Cost ($)":            "avg_cost_usd",
     "Avg Lead Time (d)":       "avg_lead_time_days",
 }
-selected_metric_label = st.selectbox(
-    "Mètrica del heatmap",
-    options=list(metric_options.keys()),
-    index=0,
-)
+selected_metric_label = st.selectbox("Heatmap metric", list(metric_options.keys()), index=0)
 selected_metric = metric_options[selected_metric_label]
 
-col_heatmap, col_top = st.columns([3, 1])
+col_heat, col_right = st.columns([3, 1])
 
-with col_heatmap:
-    st.markdown('<div class="section-label">Heatmap OD — intensitat per mètrica seleccionada</div>', unsafe_allow_html=True)
+# ── Heatmap ─────────────────────────────────────────────────────────────────
+with col_heat:
+    st.markdown('<div class="section-label">OD Heatmap — selected metric intensity</div>', unsafe_allow_html=True)
 
     origins      = sorted(df_od["origin"].unique())
     destinations = sorted(df_od["destination"].unique())
@@ -700,7 +758,8 @@ with col_heatmap:
     for _, row in df_od.iterrows():
         matrix.loc[row["origin"], row["destination"]] = row[selected_metric]
 
-    colorscale = "RdYlGn_r" if selected_metric in ("delay_rate_pct", "primary_route_share_pct") else "Blues"
+    is_risk_metric = selected_metric in ("delay_rate_pct", "route_concentration")
+    colorscale = "RdYlGn_r" if is_risk_metric else "Blues"
 
     fig_heat = go.Figure(go.Heatmap(
         z=matrix.values,
@@ -711,128 +770,202 @@ with col_heatmap:
             title=dict(text=selected_metric_label, font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1)),
             tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1),
         ),
-        xgap=1,
-        ygap=1,
+        xgap=1, ygap=1,
         hoverongaps=False,
-        hovertemplate="<b>%{y} → %{x}</b><br>" + selected_metric_label + ": %{z:.1f}<extra></extra>",
-        text=[[f"{v:.1f}" if not pd.isna(v) else "—" for v in row] for row in matrix.values],
+        hovertemplate="<b>%{y} → %{x}</b><br>" + selected_metric_label + ": %{z:.3f}<extra></extra>",
+        text=[[f"{v:.2f}" if not pd.isna(v) else "—" for v in row] for row in matrix.values],
         texttemplate="%{text}",
         textfont=dict(size=9, family=FONT_MONO, color=TEXT_COLOR2),
     ))
     fig_heat.update_layout(
-        **base_layout(height=330),
-        xaxis=dict(
-            title="Destination",
-            tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1),
-            tickangle=-30,
-            linecolor="#E5E7EB",
-        ),
-        yaxis=dict(
-            title="Origin",
-            tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1),
-            linecolor="#E5E7EB",
-        ),
+        **base_layout(height=340),
+        xaxis=dict(title="Destination", tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), tickangle=-30, linecolor="#E5E7EB"),
+        yaxis=dict(title="Origin",      tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), linecolor="#E5E7EB"),
         margin=dict(l=10, r=10, t=10, b=10),
     )
     st.plotly_chart(fig_heat, use_container_width=True)
 
-with col_top:
-    st.markdown("")
+# ── Right column: redundancy profile + top-risk lanes ───────────────────────
+with col_right:
+    # Redundancy profile donut
     st.markdown('<div class="section-label">Redundancy profile</div>', unsafe_allow_html=True)
-    redundancy_counts = df_od["redundancy_profile"].value_counts().reset_index()
-    redundancy_counts.columns = ["Profile", "Count"]
-    profile_colors = {
-        "single_route":                 "#EF4444",
-        "multi_route_but_concentrated": "#F59E0B",
-        "multi_route_diversified":      "#10B981",
-    }
-    fig_red = go.Figure(go.Bar(
-        x=redundancy_counts["Count"],
-        y=redundancy_counts["Profile"].str.replace("_", " ").str.title(),
-        orientation="h",
-        marker_color=[profile_colors.get(p, "#6B7280") for p in redundancy_counts["Profile"]],
-        text=redundancy_counts["Count"],
+    profile_order  = ["single_route", "highly_concentrated", "moderately_concentrated", "well_diversified"]
+    profile_labels = ["Single route", "Highly concentrated", "Moderately concentrated", "Well diversified"]
+    profile_colors = ["#EF4444", "#F59E0B", "#3B82F6", "#10B981"]
+
+    counts = df_od["redundancy_profile"].value_counts()
+    vals   = [counts.get(p, 0) for p in profile_order]
+
+    fig_donut = go.Figure(go.Pie(
+        labels=profile_labels,
+        values=vals,
+        hole=0.58,
+        marker=dict(colors=profile_colors, line=dict(color="#0F1117", width=2)),
+        textinfo="percent",
         textposition="outside",
-        textfont=dict(size=10, family=FONT_MONO, color=TEXT_COLOR1),
+        textfont=dict(size=9, family=FONT_MONO, color="#FFFFFF"),
+        hovertemplate="<b>%{label}</b><br>Lanes: %{value}<br>Share: %{percent}<extra></extra>",
     ))
-    fig_red.update_layout(
-        **base_layout(height=165),
-        xaxis=dict(visible=False),
-        yaxis=dict(
-            tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1),
-            showgrid=False,
+    fig_donut.update_layout(                          
+        **base_layout(height=300),
+        showlegend=True,
+        legend=dict(
+            orientation="h",                          
+            x=0.5,                                   
+            y=-0.15,                                  
+            xanchor="center",
+            yanchor="top",
+            font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1),
         ),
-        margin=dict(l=8, r=8, t=8, b=8),
+        margin=dict(l=10, r=10, t=10, b=80),
     )
-    max_val = redundancy_counts["Count"].max()
+    st.plotly_chart(fig_donut, use_container_width=True)
 
-    fig_red.update_layout(
-        xaxis=dict(range=[0, max_val * 1.2], visible=False),
-    )
+# ── Route share distribution scatter ────────────────────────────────────────
+st.markdown('<div class="section-label">Route concentration vs delay rate — bubble = shipment volume</div>', unsafe_allow_html=True)
+
+profile_color_map = {
+    "single_route":             "#EF4444",
+    "highly_concentrated":      "#F59E0B",
+    "moderately_concentrated":  "#3B82F6",
+    "well_diversified":         "#10B981",
+}
+
+fig_scatter = go.Figure()
+for profile, grp in df_od.groupby("redundancy_profile"):
+    fig_scatter.add_trace(go.Scatter(
+        x=grp["route_concentration"],
+        y=grp["delay_rate_pct"],
+        mode="markers",
+        name=profile.replace("_", " ").title(),
+        marker=dict(
+            size=grp["shipments"].apply(lambda v: max(6, min(30, v / df_od["shipments"].max() * 40))),
+            color=profile_color_map.get(profile, "#6B7280"),
+            opacity=0.75,
+            line=dict(width=0.5, color="#FFFFFF"),
+        ),
+        text=grp["origin"] + " → " + grp["destination"],
+        customdata=grp[["shipments", "route_count", "avg_cost_usd"]].values,
+        hovertemplate=(
+            "<b>%{text}</b><br>"
+            "Concentration: %{x:.3f}<br>"
+            "Delay rate: %{y:.1f}%<br>"
+            "Shipments: %{customdata[0]}<br>"
+            "Routes used: %{customdata[1]}<br>"
+            "Avg cost: $%{customdata[2]:.0f}<extra></extra>"
+        ),
+    ))
+
+fig_scatter.update_layout(
+    **base_layout(height=300),
+    xaxis=dict(title="Route Concentration (HHI)", tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), gridcolor="#F3F4F6"),
+    yaxis=dict(title="Delay Rate (%)",            tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), gridcolor="#F3F4F6"),
+    legend=dict(font=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1), orientation="h", y=-0.15),
+    margin=dict(l=10, r=10, t=10, b=40),
+)
+st.plotly_chart(fig_scatter, use_container_width=True)
+
+# ── Detailed lane analysis ─────────────────────────────────────────────────────────────
+st.markdown('<div class="section-label">Detailed Lane Analysis</div>', unsafe_allow_html=True)
+
+origins = sorted(df_od["origin"].unique())
+destinations = sorted(df_od["destination"].unique())
+
+c1, c2 = st.columns(2)
+with c1:
+    selected_origin = st.selectbox("Origin", origins, index=origins.index("Shanghai") if "Shanghai" in origins else 0)
+with c2:
+    selected_dest = st.selectbox("Destination", destinations, index=destinations.index("Rotterdam") if "Rotterdam" in destinations else 0)
+
+lane_data = df_od[(df_od["origin"] == selected_origin) & (df_od["destination"] == selected_dest)]
+
+if not lane_data.empty:
+    row = lane_data.iloc[0]
+    m1, m2, m3, m4 = st.columns(4)
     
-    st.plotly_chart(fig_red, use_container_width=True)
-    
-st.markdown('<div class="section-subtitle">Top 10 — anàlisi de lanes</div>', unsafe_allow_html=True)
-
-# Per defecte ordenem per shipments
-default_metric = "shipments"
-
-# Nota per l’usuari
-st.caption("Tip: pots ordenar directament a la taula fent clic als headers de columna.")
-
-df_top10 = (
-    df_od
-    .sort_values(default_metric, ascending=False)
-    .head(10)[
-        [
-            "origin",
-            "destination",
-            "shipments",
-            "primary_route_share_pct",
-            "delay_rate_pct",
-            "avg_cost_usd",
-            "avg_lead_time_days",
-        ]
+    metrics = [
+        (m1, "Volume", f"{row['shipments']}", "Total Shipments"),
+        (m2, "Avg Cost", f"${row['avg_cost_usd']:,.0f}", "Per Shipment"),
+        (m3, "Lead Time", f"{row['avg_lead_time_days']}d", "Average Door-to-Door"),
+        (m4, "Delay Rate", f"{row['delay_rate_pct']}%", "Reliability Index"),
     ]
-    .rename(columns={
-        "origin": "Origin",
-        "destination": "Destination",
-        "shipments": "Total Shipments",
-        "primary_route_share_pct": "Route Concentration (%)",
-        "delay_rate_pct": "Delay (%)",
-        "avg_cost_usd": "Avg Cost ($)",
-        "avg_lead_time_days": "Avg Lead Time (d)",
-    })
-)
+    
+    # KPIs cards
+    for col, label, val, sub in metrics:
+        with col:
+            st.markdown(f"""
+            <div class="kpi-card kpi-neutral" style="min-height:100px; padding: 0.6rem 0.8rem;">
+                <div class="kpi-label">{label}</div>
+                <div class="kpi-value" style="font-size: 1.2rem;">{val}</div>
+                <div class="kpi-sub" style="font-size: 0.65rem;">{sub}</div>
+            </div>""", unsafe_allow_html=True)
 
-st.dataframe(
-    df_top10,
-    hide_index=True,
-    use_container_width=True,
-    column_config={
-        "Total Shipments": st.column_config.NumberColumn(
-            "Total Shipments",
-            format="%.0f"
-        ),
-        "Route Concentration (%)": st.column_config.ProgressColumn(
-            "Route Concentration (%)",
-            min_value=0,
-            max_value=100,
-            format="%.2f%%"
-        ),
-        "Delay (%)": st.column_config.ProgressColumn(
-            "Delay (%)",
-            min_value=0,
-            max_value=100,
-            format="%.2f%%"
-        ),
-        "Avg Cost ($)": st.column_config.NumberColumn(
-            "Avg Cost ($)",
-            format="$%.2f"
-        ),
-        "Avg Lead Time (d)": st.column_config.NumberColumn(
-            "Avg Lead Time (d)",
-            format="%.2f"
-        ),
-    }
-)
+    # Donut + Context
+    st.markdown('<hr style="border:0.5px solid #2A2D3A; margin: 2rem 0;">', unsafe_allow_html=True)
+    col_chart, col_info = st.columns([1.6, 1])
+
+    with col_chart:
+        st.markdown('<div class="section-label">Route Share Distribution</div>', unsafe_allow_html=True)
+        
+        share_data = row["_route_share"]
+        if share_data:
+            labels = list(share_data.keys())
+            values = list(share_data.values())
+            colors_for_donut = [ROUTE_COLORS.get(label, DEFAULT_ROUTE_COLOR) for label in labels]
+            
+            fig_lane_donut = go.Figure(go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.58,
+                marker=dict(colors=profile_colors, line=dict(color="#0F1117", width=2)),
+                textinfo="label + percent",
+                textfont=dict(size=9, family=FONT_MONO, color="#FFFFFF"),
+                textposition='outside',
+                showlegend=True
+            ))
+            
+            fig_lane_donut.update_layout(
+                margin=dict(t=30, b=30, l=35, r=35),
+                height=290,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                legend=dict(
+                    orientation="v",
+                    yanchor="middle",
+                    y=0.5,
+                    xanchor="left",
+                    x=0.75,
+                    font=dict(family="IBM Plex Mono", size=10, color="#9CA3AF")
+                )
+            )
+            st.plotly_chart(fig_lane_donut, use_container_width=True)
+
+    with col_info:
+        st.markdown('<div class="section-label">Resilience Profile</div>', unsafe_allow_html=True)
+        profile = row['redundancy_profile'].replace('_', ' ').title()
+        
+        # Mapa de colors consistent
+        color_map = {"Single Route": "#EF4444", "Highly Concentrated": "#F59E0B", 
+                    "Moderately Concentrated": "#3B82F6", "Well Diversified": "#10B981"}
+        p_color = color_map.get(profile, "#6B7280")
+        
+        # Afegim un min-height per alinear-ho visualment amb el gràfic
+        st.markdown(f"""
+        <div style="background: #1A1D27; border: 1px solid #2A2D3A; border-left: 4px solid {p_color}; 
+                    border-radius: 8px; padding: 1.5rem; min-height: 240px; display: flex; flex-direction: column; justify-content: center;">
+            <div style="color: {p_color}; font-family: 'IBM Plex Sans'; font-weight: 700; font-size: 1.2rem; margin-bottom: 0.8rem;">
+                {profile}
+            </div>
+            <p style="font-family: 'IBM Plex Sans'; font-size: 0.9rem; color: #E5E7EB; line-height: 1.6; margin: 0;">
+                This lane operates via <strong>{row['route_count']}</strong> distinct routes. 
+                The concentration (HHI) is <strong>{row['route_concentration']:.3f}</strong>.
+                <br><br>
+                <span style="color: #9CA3AF; font-style: italic;">
+                    Risk Alert: {'High dependency detected. Any disruption on the primary route will severely impact lead times.' if row['route_concentration'] > 0.7 else 'Diversification looks stable.'}
+                </span>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+else:
+    st.warning(f"No data found for the lane: {selected_origin} ➔ {selected_dest}")
