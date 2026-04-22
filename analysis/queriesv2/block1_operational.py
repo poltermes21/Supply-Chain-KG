@@ -158,17 +158,20 @@ class Block1Queries:
             f.shipments AS shipments,
             f.route_count AS route_count,
             f.routes_used AS routes_used,
-            f.primary_route AS primary_route,
-            round(f.primary_route_share_pct, 2) AS primary_route_share_pct,
+            f.route_share AS route_share,
+            round(f.route_concentration, 3) AS route_concentration,
             CASE
                 WHEN f.route_count = 1 THEN 'single_route'
-                WHEN f.primary_route_share_pct >= 80 THEN 'multi_route_but_concentrated'
-                ELSE 'multi_route_diversified'
+                WHEN f.route_concentration >= 0.7 THEN 'highly_concentrated'
+                WHEN f.route_concentration >= 0.4 THEN 'moderately_concentrated'
+                ELSE 'well_diversified'
             END AS redundancy_profile,
             round(f.delay_rate_pct, 2) AS delay_rate_pct,
             round(f.avg_cost_usd, 2) AS avg_cost_usd,
             round(f.avg_lead_time_days, 2) AS avg_lead_time_days
-        ORDER BY f.route_count ASC, f.primary_route_share_pct DESC, f.shipments DESC
+        ORDER BY
+            f.route_concentration DESC,
+            f.shipments DESC
     """
     
     # 1.5 TEMPORAL TREND

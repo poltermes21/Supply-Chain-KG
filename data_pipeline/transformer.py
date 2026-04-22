@@ -261,8 +261,8 @@ class DataTransformer:
         Metrics created:
             - mitigation_effectiveness (str): 4-level classification of mitigation outcome
             - mitigation_effective (bool): True if fully or partially effective
-            - cost_vs_baseline_pct (%): (cost - avg_normal_cost) / avg_normal_cost * 100
             - route_segment (str): "{Origin_Region}_to_{Destination_Region}"
+            - cost_vs_baseline_pct (%): (cost - avg_normal_cost) / avg_normal_cost * 100
         """
         print("Creating resilience metrics...")
 
@@ -283,6 +283,8 @@ class DataTransformer:
         self.df['mitigation_effective'] = self.df['mitigation_effectiveness'].isin(
             ['fully_effective', 'partially_effective']
         )
+        
+        self.df['route_segment'] = self.df["Origin_Region"] + "_to_" + self.df['Destination_Region']
         
         # Baseline segmentat (només no disruptives)
         baseline = (

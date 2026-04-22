@@ -5,12 +5,10 @@ START_DATE = "2024-01-01"
 END_DATE   = "2026-01-31"
 SEED       = 42
 
-# ── OD PAIRS ─────────────────────────────────────────────────────────────────
+# OD PAIRS
 # Routes: Suez | Pacific | Atlantic | Intra-Asia | CoGH (Cape of Good Hope)
-# "Commodity" replaced by "CoGH" (correct geographical corridor)
-# "Pacific" removed from all Asia→Europe pairs (geographically impossible)
 OD_ROUTES = {
-    # SUEZ — Asia/India → Europe via Red Sea + Suez Canal
+    # SUEZ — Asia/India -> Europe via Red Sea + Suez Canal
     ("Shenzhen, CN",  "Rotterdam, NL"):  [("Suez", 0.75), ("CoGH", 0.25)],
     ("Shanghai, CN",  "Rotterdam, NL"):  [("Suez", 0.70), ("CoGH", 0.30)],
     ("Mumbai, IN",    "Felixstowe, UK"): [("Suez", 0.85), ("CoGH", 0.15)],
@@ -20,14 +18,14 @@ OD_ROUTES = {
     ("Singapore, SG", "Hamburg, DE"):    [("Suez", 0.80), ("CoGH", 0.20)],
     ("Singapore, SG", "Rotterdam, NL"):  [("Suez", 0.80), ("CoGH", 0.20)],
     ("Busan, KR",     "Hamburg, DE"):    [("Suez", 0.70), ("CoGH", 0.30)],
-    # PACIFIC — Asia → North America West Coast
+    # PACIFIC — Asia -> North America West Coast
     ("Shanghai, CN",  "Los Angeles, US"):[("Pacific", 0.95), ("CoGH", 0.05)],
     ("Tokyo, JP",     "Los Angeles, US"):[("Pacific", 1.00)],
     ("Busan, KR",     "Los Angeles, US"):[("Pacific", 0.95), ("CoGH", 0.05)],
     ("Shenzhen, CN",  "Los Angeles, US"):[("Pacific", 1.00)],
-    # PACIFIC + Panama — Asia → US East Coast
+    # PACIFIC + Panama — Asia -> US East Coast
     ("Shanghai, CN",  "New York, US"):   [("Pacific", 0.80), ("Suez", 0.20)],
-    # ATLANTIC — Europe ↔ Americas
+    # ATLANTIC — Europe <-> Americas
     ("Hamburg, DE",   "New York, US"):   [("Atlantic", 1.00)],
     ("Rotterdam, NL", "New York, US"):   [("Atlantic", 1.00)],
     ("Hamburg, DE",   "Santos, BR"):     [("Atlantic", 1.00)],
@@ -38,9 +36,9 @@ OD_ROUTES = {
     ("Busan, KR",     "Singapore, SG"):  [("Intra-Asia", 1.00)],
     ("Shenzhen, CN",  "Tokyo, JP"):      [("Intra-Asia", 1.00)],
     ("Mumbai, IN",    "Shanghai, CN"):   [("Intra-Asia", 0.70), ("CoGH", 0.30)],
-    # CoGH — South America bulk → Asia
+    # CoGH — South America bulk -> Asia
     ("Santos, BR",    "Shanghai, CN"):   [("CoGH", 1.00)],
-    # Europe → Asia (Rotterdam as bidirectional hub)
+    # Europe -> Asia
     ("Rotterdam, NL", "Singapore, SG"):  [("Suez", 0.80), ("CoGH", 0.20)],
 }
 
@@ -60,7 +58,7 @@ OD_WEIGHTS = {
     ("Rotterdam, NL", "Singapore, SG"):  1.1,
 }
 
-# ── LEAD TIMES ────────────────────────────────────────────────────────────────
+# LEAD TIMES
 LEAD_TIME = {
     "Intra-Asia": {
         "Sea": {"base": (5,  14), "buffer": 0.05},
@@ -98,7 +96,7 @@ MITIGATION_REDUCTION = {
     "Expedited Air Freight": 0.55,
 }
 
-# ── DISRUPTIONS ───────────────────────────────────────────────────────────────
+# DISRUPTIONS
 DISRUPTION_BASE_PROB = {
     ("Suez",       "Sea"):  0.16,
     ("Suez",       "Air"):  0.04,
@@ -112,10 +110,10 @@ DISRUPTION_BASE_PROB = {
     ("CoGH",       "Air"):  0.03,
 }
 
-# Geopolitical Conflict → Suez ONLY
-# Severe Weather (Typhoon/Storm) → Pacific, Intra-Asia, Atlantic
-# Severe Weather (Cape Storms) → CoGH ONLY
-# Port Congestion → all Sea routes
+# Geopolitical Conflict -> Suez ONLY
+# Severe Weather (Typhoon/Storm) -> Pacific, Intra-Asia, Atlantic
+# Severe Weather (Cape Storms) -> CoGH ONLY
+# Port Congestion -> all Sea routes
 DISRUPTION_TYPES = {
     "Suez": {
         "Geopolitical Conflict (Route Diversion)": 0.55,
@@ -155,7 +153,7 @@ RISK_DISRUPTION_MULTIPLIER = {
     "critical": 2.2,
 }
 
-# ── RISK BY ROUTE ─────────────────────────────────────────────────────────────
+# RISK BY ROUTE
 # (geo_mean, geo_std, weather_mean, weather_std)
 RISK_BY_ROUTE = {
     "Suez":       (0.65, 0.18, 3.5, 2.0),
@@ -165,7 +163,7 @@ RISK_BY_ROUTE = {
     "CoGH":       (0.22, 0.12, 6.5, 2.3),
 }
 
-# ── COSTS ─────────────────────────────────────────────────────────────────────
+# COSTS
 COST_BASE_SEA = {
     "Intra-Asia": 1800,
     "Atlantic":   2800,
@@ -191,7 +189,7 @@ MITIGATION_COST_FACTOR = {
     "Expedited Air Freight": 2.50,
 }
 
-# ── PRODUCTS BY ORIGIN ────────────────────────────────────────────────────────
+# PRODUCTS BY ORIGIN
 PRODUCT_BY_ORIGIN = {
     "Shanghai, CN":   {"Consumer Electronics": 0.30, "Semiconductors": 0.25,
                        "Auto Parts": 0.20, "Textiles": 0.15,
@@ -231,7 +229,7 @@ PRODUCT_BY_ORIGIN = {
                        "Semiconductors": 0.01},
 }
 
-# ── AIR PROBABILITY ───────────────────────────────────────────────────────────
+# AIR PROBABILITY
 AIR_PROB_BY_PRODUCT = {
     "Pharmaceuticals":      0.45,
     "Semiconductors":       0.38,
@@ -249,7 +247,7 @@ AIR_ROUTE_MODIFIER = {
     "CoGH":       0.6,
 }
 
-# ── MITIGATION BY DISRUPTION ──────────────────────────────────────────────────
+# MITIGATION BY DISRUPTION
 MITIGATION_BY_DISRUPTION = {
     "No_Disruption": {
         "Standard Shipping": 1.00,

@@ -7,6 +7,7 @@ needed to build the Knowledge Graph in Neo4j.
 
 import pandas as pd
 import os
+import json
 from typing import Dict, List
 from settings import DATA_DIR
 
@@ -505,7 +506,16 @@ class KGExtractor:
         for (origin, destination), group in grouped:
             route_counts = group['Route_Type'].value_counts()
             mode_counts = group['Transportation_Mode'].value_counts()
+            
+            route_counts = group['Route_Type'].value_counts()
+            total = len(group)
 
+            route_share = {
+                route: round(count / total, 4)
+                for route, count in route_counts.items()
+            }
+            route_concentration = sum(v**2 for v in route_share.values())
+            
             city_flow.append({
                 'from': origin,
                 'to': destination,
@@ -515,8 +525,9 @@ class KGExtractor:
 
                 'route_count': int(group['Route_Type'].nunique()),
                 'routes_used': sorted(group['Route_Type'].dropna().unique().tolist()),
-                'primary_route': route_counts.idxmax(),
-                'primary_route_share_pct': round(float(route_counts.iloc[0] / len(group) * 100), 2),
+                
+                'route_share': json.dumps(route_share),
+                'route_concentration': round(route_concentration, 4),
 
                 'dominant_mode': mode_counts.idxmax(),
                 'air_share_pct': round(float(group['Transportation_Mode'].eq('Air').mean() * 100), 2),
@@ -587,7 +598,10 @@ class KGExtractor:
 
 
 if __name__ == "__main__":
-    df_transformed = pd.read_csv(os.path.join(DATA_DIR, "data_transformedv2.csv"))
+    df_transformed = pd.read_csv(
+        os.path.join(DATA_DIR, "data_transformedv2.csv"),
+        parse_dates=['Order_Date']
+    )
     print(f"Loaded {len(df_transformed)} rows from data_transformed.csv\n")
 
     extractor = KGExtractor(df_transformed)
