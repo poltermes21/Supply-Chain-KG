@@ -191,7 +191,7 @@ class KGExtractor:
         for _, row in all_countries.iterrows():
             nodes.append({
                 'id':           row['country_code'],
-                'country_name': row['country_name'],
+                'name':         row['country_name'],
                 'region':       row['region'],
             })
 

@@ -40,7 +40,7 @@ class DataTransformer:
         Parenthetical details are stripped to keep names concise and query-friendly.
         
         Examples:
-            'No_Disruption' -> 'no_disruption'
+            'No Disruption' -> 'no_disruption'
             'Port Congestion' -> 'port_congestion'
             'Geopolitical Conflict (Route Diversion)' -> 'geopolitical_conflict'
             'Severe Weather (Typhoon/Storm)' -> 'severe_weather'
@@ -68,11 +68,11 @@ class DataTransformer:
         Create numeric IDs for Product_Category, Disruption_Event, and Mitigation_Action_Taken.
         
         IDs start at 0 for the first element.
-        For disruptions, 'No_Disruption' is always assigned ID 0.
+        For disruptions, 'No Disruption' is always assigned ID 0.
         
         Adds columns:
             - product_category_id: 0, 1, 2...
-            - disruption_id: 0, 1, 2... (0 = No_Disruption)
+            - disruption_id: 0, 1, 2... (0 = No Disruption)
             - mitigation_action_id: 0, 1, 2...
         """
         print("Creating numeric IDs for entities...")
@@ -85,13 +85,13 @@ class DataTransformer:
         for cat, cat_id in sorted(self.category_id_map.items(), key=lambda x: x[1]):
             print(f"    {cat_id}: {cat}")
         
-        # Disruption Type IDs (0-indexed, No_Disruption = 0, rest alphabetically)
+        # Disruption Type IDs (0-indexed, No Disruption = 0, rest alphabetically)
         unique_disruptions = sorted(self.df['Disruption_Event'].unique())
         
-        # Ensure No_Disruption gets ID 0
-        if 'No_Disruption' in unique_disruptions:
-            unique_disruptions.remove('No_Disruption')
-            unique_disruptions = ['No_Disruption'] + unique_disruptions
+        # Ensure No Disruption gets ID 0
+        if 'No Disruption' in unique_disruptions:
+            unique_disruptions.remove('No Disruption')
+            unique_disruptions = ['No Disruption'] + unique_disruptions
         
         self.disruption_id_map = {dis: idx for idx, dis in enumerate(unique_disruptions)}
         self.df['disruption_id'] = self.df['Disruption_Event'].map(self.disruption_id_map)
@@ -209,12 +209,12 @@ class DataTransformer:
         Create simple boolean flags for graph filtering.
         
         Flags created:
-            - is_disrupted: True if a disruption event occurred (Disruption_Event != 'No_Disruption')
+            - is_disrupted: True if a disruption event occurred (Disruption_Event != 'No Disruption')
             - is_delayed: True if the order was delivered late (Delivery_Status == 'Late')
         """
         print("Creating boolean flags...")
         
-        self.df['is_disrupted'] = self.df['Disruption_Event'] != 'No_Disruption'
+        self.df['is_disrupted'] = self.df['Disruption_Event'] != 'No Disruption'
         self.df['is_delayed'] = self.df['Delivery_Status'] == 'Late'
         
         self.transformation_stats['flags'] = {
@@ -231,7 +231,7 @@ class DataTransformer:
         Create efficiency and performance metrics for Order nodes.
         
         Metrics created:
-            - lead_time_deviation_pct (%): (Scheduled - Actual) / Scheduled * 100
+            - lead_time_deviation_pct (%): (Actual - Scheduled) / Actual * 100
             - cost_per_kg (USD/kg): Shipping_Cost_USD / Order_Weight_Kg
             - delay_ratio (%): Delay_Days / Scheduled_Lead_Time_Days * 100
         """

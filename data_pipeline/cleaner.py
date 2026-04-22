@@ -33,22 +33,22 @@ class DataCleaner:
     
     def fill_disruption_events(self):
         """
-        Fill missing Disruption_Event values with 'No_Disruption'.
+        Fill missing Disruption_Event values with 'No Disruption'.
         
         Rationale: NaN means no disruption occurred, not missing data.
         """
         print("Filling missing Disruption_Event...")
         
         missing_count = self.df['Disruption_Event'].isna().sum()
-        self.df['Disruption_Event'] = self.df['Disruption_Event'].fillna('No_Disruption')
+        self.df['Disruption_Event'] = self.df['Disruption_Event'].fillna('No Disruption')
         
         self.cleaning_actions.append({
             'action': 'fill_disruption_events',
             'records_affected': int(missing_count),
-            'fill_value': 'No_Disruption'
+            'fill_value': 'No Disruption'
         })
         
-        print(f"   Filled {missing_count} records with 'No_Disruption'")
+        print(f"   Filled {missing_count} records with 'No Disruption'")
         return missing_count
     
     # 2. CONVERT DATA TYPES
