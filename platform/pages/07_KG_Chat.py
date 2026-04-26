@@ -191,7 +191,7 @@ with st.form("chat_form", clear_on_submit=True):
 if submitted and user_input.strip():
     memory.add_user(user_input.strip())
 
-    with st.spinner("Querying the knowledge graph..."):
+    with st.spinner("Thinking..."):
         initial_state = {
             "question":         user_input.strip(),
             "chat_history":     memory.get_history()[:-1],  # exclude just-added user msg

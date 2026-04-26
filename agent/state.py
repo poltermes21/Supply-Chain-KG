@@ -9,6 +9,7 @@ class AgentState(BaseModel):
     # Input
     question: str
     chat_history: List[Dict] = Field(default_factory=list)
+    is_followup: bool = False
     
     # Intent
     intent: Optional[str] = None

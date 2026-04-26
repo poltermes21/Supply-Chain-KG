@@ -17,28 +17,77 @@ from connection import get_neo4j_driver
 # ─────────────────────────────────────────────
 
 INTENT_SYSTEM = """You are an intent classifier for a supply-chain knowledge graph.
-Given a user question, return a JSON object with:
+Given a user question and optionally the previous question context, return a JSON object with:
   - "intent": one of [route_query, hub_analysis, disruption_query, cost_query, 
-                       product_query, geographic_query, general_stats, unknown]
-  - "entities": list of proper nouns or named entities mentioned (cities, routes, products…)
+                       product_query, geographic_query, general_stats, what-if scenario,
+                       chitchat, followup, unknown]
+  - "entities": list of proper nouns or named entities mentioned
+  - "is_followup": true if this question refers to results from a previous question
+                   (e.g. "which of those?", "and the cheapest?", "tell me more about the first one")
+                   false otherwise
+
+Classify as "chitchat" any greeting or small talk not about supply chain data.
+Classify as "followup" when the question cannot be understood without the previous context.
 
 Respond ONLY with valid JSON, no markdown.
 """
 
+CHITCHAT_SYSTEM = """You are a helpful Supply Chain Knowledge Graph assistant.
+Your role is to help users query and understand supply chain data stored in a Neo4j graph database.
+
+When a user greets you or makes small talk, respond naturally and warmly in the SAME LANGUAGE.
+
+ALWAYS structure your response as:
+1. A short, natural reply to whay they said (1-2 sentences)
+2. One line introducing what you can help with
+3. A bullet list of exactly 3 example questions
+
+The example questions must be realistic for this supply chain KG which contains:
+routes (Suez, Pacific, Intra-Asia, CoGH, Atlantic), cities (Shanghai, Rotterdam, etc.),
+transport modes (Sea, Air), product categories, disruption types, risk assessments,
+and mitigation actions.
+
+Never make up statistics or real data.
+"""
+
 def detect_intent(state: AgentState) -> AgentState:
-    llm   = get_interface_llm(temperature=0)
+    llm = get_interface_llm(temperature=0)
+
+    recent = ""
+    if state.chat_history:
+        recent = "\n".join(
+            f"{m['role'].upper()}: {m['content']}"
+            for m in state.chat_history[-6:]  # last 6 questions
+        )
+
     reply = llm.invoke([
-        {"role": "system",  "content": INTENT_SYSTEM},
-        {"role": "user",    "content": state.question},
+        {"role": "system", "content": INTENT_SYSTEM},
+        {"role": "user",   "content": f"{recent}\nNEW QUESTION: {state.question}"},
     ])
     try:
         parsed = json.loads(reply.content)
     except Exception:
-        parsed = {"intent": "unknown", "entities": []}
+        parsed = {"intent": "unknown", "entities": [], "is_followup": False}
+
+    intent      = parsed.get("intent", "unknown")
+    is_followup = parsed.get("is_followup", False)
+
+    if intent == "chitchat":
+        chitchat_reply = get_interface_llm(temperature=0.7).invoke([
+            {"role": "system", "content": CHITCHAT_SYSTEM},
+            {"role": "user",   "content": state.question},
+        ])
+        return state.model_copy(update={
+            "intent": "chitchat",
+            "entities": [],
+            "is_followup": False,
+            "answer": chitchat_reply.content.strip(),
+        })
 
     return state.model_copy(update={
-        "intent": parsed.get("intent", "unknown"),
-        "entities": parsed.get("entities", []),
+        "intent":      intent,
+        "entities":    parsed.get("entities", []),
+        "is_followup": is_followup,
     })
 
 # ─────────────────────────────────────────────
@@ -243,9 +292,36 @@ FORMAT_SYSTEM = """You are a supply-chain analyst assistant.
 - Maintain a professional, analytical tone.
 """
 
+FORMAT_FOLLOWUP_SYSTEM = """You are a supply-chain analyst assistant.
+The user is asking a follow-up question based on a previous answer.
+Use the conversation history below to answer — do NOT invent new data.
+Respond in the same language as the user's question.
+
+### STYLE GUIDELINES:
+- Be concise and factual.
+- Use bullet points or a short table for lists or comparisons.
+- Maintain a professional, analytical tone.
+"""
+
 def format_answer(state: AgentState) -> AgentState:
     llm = get_interface_llm(temperature=0.3)
+    
+    # Pass-trough chitchat
+    if state.answer:
+        return state
 
+    # Follow up, answer from chat_history, no raw_results needed
+    if state.is_followup:
+        history_str = "\n".join(
+            f"{m['role'].upper()}: {m['content']}"
+            for m in state.chat_history[-6:]
+        )
+        reply = llm.invoke([
+            {"role": "system", "content": FORMAT_FOLLOWUP_SYSTEM},
+            {"role": "user",   "content": f"{history_str}\n\nFOLLOWUP: {state.question}"},
+        ])
+        return state.model_copy(update={"answer": reply.content.strip()})
+    
     # if retries exhausted with no results
     if not state.raw_results and state.retry_count >= 3:
         return state.model_copy(update={
@@ -261,7 +337,6 @@ def format_answer(state: AgentState) -> AgentState:
         f"Question: {state.question}\n\n"
         f"Data from the knowledge graph:\n{data_str}"
     )
-
     reply = llm.invoke([
         {"role": "system", "content": FORMAT_SYSTEM},
         {"role": "user",   "content": user_prompt},

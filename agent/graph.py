@@ -18,6 +18,13 @@ from .nodes import (
 # Routing logic
 # ─────────────────────────────────────────────
 
+def route_after_intent(state: AgentState) -> str:
+    if state.intent == "chitchat":
+        return "format"
+    if state.is_followup:
+        return "format"
+    return "generate"
+
 def route_after_validation(state: AgentState) -> str:
     if state.validation_ok:
         return "execute"
@@ -30,7 +37,6 @@ def route_after_execution(state: AgentState) -> str:
     if state.execution_error and state.retry_count < 3:
         return "regenerate"
     return "format"
-
 
 # ─────────────────────────────────────────────
 # Graph assembly
@@ -48,7 +54,12 @@ def build_graph() -> StateGraph:
 
     g.set_entry_point("detect_intent")
 
-    g.add_edge("detect_intent",  "generate_query")
+    g.add_conditional_edges(
+        "detect_intent",
+        route_after_intent,
+        {"format": "format_answer","generate": "generate_query"},
+    )
+    
     g.add_edge("generate_query", "validate_query")
 
     g.add_conditional_edges(
