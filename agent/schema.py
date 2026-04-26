@@ -9,8 +9,6 @@ KG_SCHEMA_PROMPT = """
 ### Environment
 - Neo4j with APOC 5.12.0 and GDS 2.6.9
 - Use `elementId()` instead of deprecated `id()` for node identity
-- All queries must be READ-ONLY (no MERGE, CREATE, DELETE, SET, REMOVE)
-- Include LIMIT only if it is requested (default 10)
 
 ---
 
@@ -55,7 +53,7 @@ KG_SCHEMA_PROMPT = """
   - mitigation_effective      Boolean  — true if mitigation_effectiveness ∈ {"fully_effective","partially_effective"}
                                          false otherwise
 
-**RiskAssessment** (15000 nodes)
+**RiskAssessment** (15000 nodes) — unique constraint on `id`
   - id                        String    — unique shipment identifier e.g "ORD-04F86DAA"
   
   - risk_level                String   — risk category based on combined_risk_score:
@@ -70,7 +68,7 @@ KG_SCHEMA_PROMPT = """
   - geopolitical_risk_index   Double   — geopolitical instability risk ∈ [0,1], 0 = stable, 1 = highly unstable
   - inflation_rate_pct        Double   — inflation rate (%) (not normalized)
 
-**City** (13 nodes)
+**City** (13 nodes) — unique constraint on `id`
   - id                        String   — name of the city e.g. "Shanghai"
 
   - role                      String   — node role based on connectivity:
@@ -83,27 +81,27 @@ KG_SCHEMA_PROMPT = """
   - inbound_degree            Long     — number of incoming shipments to the city
   - community_id              Long     — GDS Louvain community detection result (graph cluster id)
 
-**Country** (11 nodes)
+**Country** (11 nodes) — unique constraint on `id`
   - id                        String   — ISO country code (e.g. "US", "CN", "DE")
   - country_name              String   — full country name (e.g. "United States")
   - region                    String   — macro region grouping:"Asia" | "Europe" | "Americas"
 
-**Route** (5 nodes)
+**Route** (5 nodes) — unique constraint on `id`
   - id                        String   — "Suez" | "Pacific" | "Intra-Asia" | "CoGH" | "Atlantic"
 
-**ProductCategory** (7 nodes)
+**ProductCategory** (7 nodes) — unique constraint on `id`
   - id                        Long   — unique category identifier (e.g. 0, 1, 2...)
   - name                      String — "Auto Parts" |" Consumer Electronics" | "Textiles" | "Semiconductors" | "Raw Materials" | "Pharmaceuticals" | "Perishable Foods"
 
-**TransportMode** (2 nodes)
+**TransportMode** (2 nodes) — unique constraint on `id`
   - id                        String   — "Sea" | "Air"
 
-**DisruptionType** (5 nodes)
+**DisruptionType** (5 nodes) — unique constraint on `id`
   - id                        Long   — unique category identifier (0, 1, 2, 3, 4)
   - name                      String — short label, "no_disruption" | "geopolitical_conflict" | "port_congestion" | "cape_storms" | "typhoon_storm"
   - full_name                 String — human-readable description, "No Disruption" | "Geopolitical Conflict (Route Diversion)" | "Port Congestion" | "Severe Weather (Cape Storms)" | "Severe Weather (Typhoon/Storm)"
 
-**MitigationAction** (3 nodes)
+**MitigationAction** (3 nodes) — unique constraint on `id`
   - id                        Long     — unique category identifier (0, 1, 2)
   - name                      String   — "Expedited Air Freight" | "Re-routing" | "Standard Shipping"
   - avg_cost_impact           Double   — mean shipping_cost_usd grouped by mitigation action

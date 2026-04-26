@@ -17,8 +17,8 @@ load_dotenv(PROJECT_ROOT / ".env")
 # DATA CONFIGURATION
 # =============================================================================
 
-DATA_DIR = os.getenv("data_directory", "data")
-DATA_FILENAME = os.getenv("raw_data", "global_supply_chain_disruption_v1.csv")
+DATA_DIR = os.getenv("DATA_DIRECTORY", "data")
+DATA_FILENAME = os.getenv("RAW_DATA", "raw/global_supply_chain_v2.csv")
 
 # =============================================================================
 # NEO4J CONFIGURATION
@@ -28,6 +28,13 @@ NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
 
+# =============================================================================
+# AGENT CONFIGURATION
+# =============================================================================
+
+INTERFACE_GEMINI_MODEL = os.getenv("INTERFACE_GEMINI_MODEL", "gemini-2.0-flash")
+REASONING_GEMINI_MODEL = os.getenv("REASONING_GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "password")
 
 # =============================================================================
 # HELPER FUNCTION
@@ -43,6 +50,9 @@ def print_config():
     print(f"NEO4J_URI: {NEO4J_URI}")
     print(f"NEO4J_USER: {NEO4J_USER}")
     print(f"NEO4J_PASSWORD: {'*' * len(NEO4J_PASSWORD)}")
+    print(f"INTERFACE_GEMINI_MODEL: {INTERFACE_GEMINI_MODEL}")
+    print(f"REASONING_GEMINI_MODEL: {REASONING_GEMINI_MODEL}")
+    print(f"GEMINI_API_KEY: {'*' * len(GEMINI_API_KEY)}")
     print("="*60)
 
 
