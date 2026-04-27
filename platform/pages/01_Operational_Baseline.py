@@ -218,9 +218,9 @@ with st.spinner("Loading graph data..."):
     data = load_block1_data()
 
 kpis         = data["global_baseline_kpis"].iloc[0]
-df_route     = data["shipments_by_route"]
-df_mode      = data["shipments_by_transport_mode"]
-df_product   = data["shipments_by_product"]
+df_route     = data["orders_by_route"]
+df_mode      = data["orders_by_transport_mode"]
+df_product   = data["orders_by_product"]
 df_prod_dist = data["product_distribution"]
 df_severity  = data["delay_severity_distribution"]
 df_od        = data["od_redundancy_profile"]
@@ -233,28 +233,28 @@ palette_prod = px.colors.qualitative.Safe
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 1 — El sistema en xifres
+# SECTION 1 — KPIs baseline
 # ═══════════════════════════════════════════════
-st.markdown('<div class="section-title">1 · El sistema en xifres</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">1 · KPIs baseline</div>', unsafe_allow_html=True)
 
 col_v, col_r = st.columns(2)
 
 with col_v:
-    st.markdown('<div class="section-label">Volum & Operativa</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Volume & Operations</div>', unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f"""
         <div class="kpi-card kpi-neutral">
             <div class="kpi-label">Total Orders</div>
             <div class="kpi-value">{int(kpis['total_orders']):,}</div>
-            <div class="kpi-sub">Enviaments analitzats</div>
+            <div class="kpi-sub">Analyzed orders</div>
         </div>""", unsafe_allow_html=True)
     with c2:
         st.markdown(f"""
         <div class="kpi-card kpi-neutral">
             <div class="kpi-label">Avg Lead Time</div>
             <div class="kpi-value">{kpis['avg_actual_lead_time_days']:.1f}<span style="font-size:1rem;font-weight:400;color:#9CA3AF"> d</span></div>
-            <div class="kpi-sub">P95: {kpis['p95_actual_lead_time_days']:.1f} dies</div>
+            <div class="kpi-sub">P95: {kpis['p95_actual_lead_time_days']:.1f} days</div>
         </div>""", unsafe_allow_html=True)
     with c3:
         eff = kpis['avg_lead_time_deviation_pct']
@@ -268,7 +268,7 @@ with col_v:
         """, unsafe_allow_html=True)
 
 with col_r:
-    st.markdown('<div class="section-label">Risc & Cost</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Risk & Cost</div>', unsafe_allow_html=True)
     c4, c5, c6 = st.columns(3)
     with c4:
         dr = kpis['delay_rate_pct']
@@ -300,7 +300,7 @@ st.markdown("")
 st.markdown('<div class="section-label">Temporal Performance</div>', unsafe_allow_html=True)
 
 metric_map = {
-    "Shipments": "total_orders",
+    "Orders": "total_orders",
     "Delay Rate (%)": "delay_rate_pct",
     "Avg Cost ($)": "avg_cost",
 }
@@ -431,38 +431,38 @@ if len(df_mode) >= 2:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 2 — Distribució del tràfic
+# SECTION 2 — Traffic distribution
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · Distribució del tràfic</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">2 · Traffic distribution</div>', unsafe_allow_html=True)
 
 col_left, col_right = st.columns([5, 3])
 
 with col_left:
-    st.markdown('<div class="section-label">Volum per ruta</div>', unsafe_allow_html=True)
-    df_route_sorted = df_route.sort_values("total_shipments", ascending=True)
+    st.markdown('<div class="section-label">Volume by route</div>', unsafe_allow_html=True)
+    df_route_sorted = df_route.sort_values("total_orders", ascending=True)
     colors = ["#F59E0B" if "suez" in r.lower() else "#1D4ED8" for r in df_route_sorted["route"]]
 
     fig_route = go.Figure(go.Bar(
-        x=df_route_sorted["total_shipments"],
+        x=df_route_sorted["total_orders"],
         y=df_route_sorted["route"],
         orientation="h",
         marker_color=colors,
-        text=[f"{v:,}  ({p:.1f}%)" for v, p in zip(df_route_sorted["total_shipments"], df_route_sorted["pct_total"])],
+        text=[f"{v:,}  ({p:.1f}%)" for v, p in zip(df_route_sorted["total_orders"], df_route_sorted["pct_total"])],
         textposition="outside",
         textfont=dict(size=10, family=FONT_MONO, color=TEXT_COLOR1),
     ))
     fig_route.update_layout(
         **base_layout(height=420),
-        xaxis=styled_xaxis(title="Shipments", range=[0, 6100]),
+        xaxis=styled_xaxis(title="Orders", range=[0, 6100]),
         yaxis=styled_yaxis(showgrid=False),
         margin=dict(l=8, r=10, t=10, b=10),
     )
     st.plotly_chart(fig_route, use_container_width=True)
 
 with col_right:
-    st.markdown('<div class="section-label">Perfil per ruta — Lead Time, Cost & Delay (normalitzat)</div>', unsafe_allow_html=True)
-    st.caption("Valors normalitzats per comparar perfils relatius entre rutes.")
+    st.markdown('<div class="section-label">Route profile — Lead Time, Cost & Delay (normalized)</div>', unsafe_allow_html=True)
+    st.caption("Normalized values to compare relative profiles across routes.")
 
     cols_norm = ["avg_cost_usd", "avg_delay_days", "delay_rate_pct", "avg_lead_time_days"]
     df_radar = df_route.copy()
@@ -505,9 +505,10 @@ with col_right:
     )
     st.plotly_chart(fig_radar, use_container_width=True)
 
-with st.expander("📋 Taula detallada per ruta"):
-    df_display = df_route[["route", "total_shipments", "pct_total", "avg_lead_time_days", "avg_cost_usd", "avg_delay_days", "delay_rate_pct"]].copy()
-    df_display.columns = ["Route", "Shipments", "% Total", "Avg LT (d)", "Avg Cost ($)", "Avg Delay (d)", "Delay Rate (%)"]
+with st.expander("📋 Detailed table by route"):
+    st.caption("Tip: you can sort directly in the table by clicking on column headers.")
+    df_display = df_route[["route", "total_orders", "pct_total", "avg_lead_time_days", "avg_cost_usd", "avg_delay_days", "delay_rate_pct"]].copy()
+    df_display.columns = ["Route", "Orders", "% Total", "Avg LT (d)", "Avg Cost ($)", "Avg Delay (d)", "Delay Rate (%)"]
     st.dataframe(
         df_display, hide_index=True, use_container_width=True,
         column_config={
@@ -517,9 +518,9 @@ with st.expander("📋 Taula detallada per ruta"):
     )
 
 st.markdown("")
-st.markdown('<div class="section-label">Composició de producte per ruta (% sobre total ruta)</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Product composition by route (% of route total)</div>', unsafe_allow_html=True)
 
-df_pivot = df_prod_dist.pivot_table(index="route", columns="product", values="total_shipments", fill_value=0)
+df_pivot = df_prod_dist.pivot_table(index="route", columns="product", values="total_orders", fill_value=0)
 df_pivot_pct = df_pivot.div(df_pivot.sum(axis=1), axis=0) * 100
 df_pivot_pct = df_pivot_pct.reset_index()
 
@@ -552,10 +553,10 @@ st.plotly_chart(fig_stacked, use_container_width=True)
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 3 — Risc operatiu
+# SECTION 3 — Operational Risk
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">3 · On hi ha risc operatiu</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">3 · Operational Risk</div>', unsafe_allow_html=True)
 
 col_sev, col_scatter = st.columns([1, 2])
 
@@ -587,7 +588,7 @@ with col_sev:
         # Only show label+% for slices > 5%, nothing for smaller ones
         textinfo="none",
         hovertemplate="<b>%{label}</b><br>%{value:.1f}%<br>%{customdata:,} orders<extra></extra>",
-        customdata=df_sev["total_shipments"],
+        customdata=df_sev["total_orders"],
         sort=False,
     ))
     fig_sev.update_layout(
@@ -608,7 +609,7 @@ with col_sev:
     )
     st.plotly_chart(fig_sev, use_container_width=True)
 
-    df_sev_display = df_sev[["delay_severity", "total_shipments", "pct_total"]].copy()
+    df_sev_display = df_sev[["delay_severity", "total_orders", "pct_total"]].copy()
     df_sev_display.columns = ["Severity", "Orders", "% Total"]
     st.dataframe(
         df_sev_display, hide_index=True, use_container_width=True,
@@ -618,7 +619,7 @@ with col_sev:
     )
 
 with col_scatter:
-    st.markdown('<div class="section-label">Productes — Cost vs Delay Rate vs Volum</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Products — Cost vs Delay Rate vs Volume</div>', unsafe_allow_html=True)
 
     avg_cost  = df_product["avg_cost_usd"].mean()
     avg_delay = df_product["delay_rate_pct"].mean()
@@ -655,7 +656,7 @@ with col_scatter:
             y=[row["delay_rate_pct"]],
             mode="markers+text",
             marker=dict(
-                size=row["total_shipments"] / df_product["total_shipments"].max() * 55 + 12,
+                size=row["total_orders"] / df_product["total_orders"].max() * 55 + 12,
                 color=palette_prod[i % len(palette_prod)],
                 opacity=0.85,
                 line=dict(width=1.5, color="white"),
@@ -668,7 +669,7 @@ with col_scatter:
                 f"<b>{row['product_category']}</b><br>"
                 f"Avg Cost: ${row['avg_cost_usd']:,.0f}<br>"
                 f"Delay Rate: {row['delay_rate_pct']:.1f}%<br>"
-                f"Volume: {row['total_shipments']:,}<br>"
+                f"Volume: {row['total_orders']:,}<br>"
                 f"Avg Weight: {row['avg_weight_kg']:,.0f} kg"
                 "<extra></extra>"
             ),
@@ -679,7 +680,7 @@ with col_scatter:
         **base_layout(height=390),
         xaxis=styled_xaxis(
             title="Avg Shipping Cost (USD)",
-            tickformat=",.0s",   # formats as 10k, 20k, etc.
+            tickformat=",.0s",
             tickprefix="$",
         ),
         yaxis=styled_yaxis(title="Delay Rate (%)", ticksuffix="%"),
@@ -689,7 +690,7 @@ with col_scatter:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 4 — Resiliència de les lanes OD
+# SECTION 4 — OD Lane Resilience
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">4 · OD Lane Resilience</div>', unsafe_allow_html=True)
@@ -718,8 +719,8 @@ k1, k2, k3, k4, k5 = st.columns(5)
 
 kpi_od_data = [
     (k1, "Single-Route Lanes",      f"{single}",        "No alternative routing","kpi-alert"),
-    (k2, "Highly Concentrated",     f"{high_con}",      "Main route >70% of ship.","kpi-orange"),
-    (k3, "Moderately Concentrated", f"{mod_con}",       "Main route 40–70% of ship.","kpi-blue"),
+    (k2, "Highly Concentrated",     f"{high_con}",      "Main route >70% of orders","kpi-orange"),
+    (k3, "Moderately Concentrated", f"{mod_con}",       "Main route 40–70% of orders","kpi-blue"),
     (k4, "Well Diversified",        f"{diversif}",      "Route concentration <40%","kpi-ok"),
     (k5, "Avg Route Concentration", f"{avg_conc:.2f}",  "Herfindahl-style index","kpi-neutral"),
 ]
@@ -737,7 +738,7 @@ st.markdown("")
 
 # ── Controls ────────────────────────────────────────────────────────────────
 metric_options = {
-    "Total Shipments":         "shipments",
+    "Total Orders":         "orders",
     "Route Concentration":     "route_concentration",
     "Delay Rate (%)":          "delay_rate_pct",
     "Avg Cost ($)":            "avg_cost_usd",
@@ -822,7 +823,7 @@ with col_right:
     st.plotly_chart(fig_donut, use_container_width=True)
 
 # ── Route share distribution scatter ────────────────────────────────────────
-st.markdown('<div class="section-label">Route concentration vs delay rate — bubble = shipment volume</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Route concentration vs delay rate — bubble = orders volume</div>', unsafe_allow_html=True)
 
 profile_color_map = {
     "single_route":             "#EF4444",
@@ -839,18 +840,18 @@ for profile, grp in df_od.groupby("redundancy_profile"):
         mode="markers",
         name=profile.replace("_", " ").title(),
         marker=dict(
-            size=grp["shipments"].apply(lambda v: max(6, min(30, v / df_od["shipments"].max() * 40))),
+            size=grp["orders"].apply(lambda v: max(6, min(30, v / df_od["orders"].max() * 40))),
             color=profile_color_map.get(profile, "#6B7280"),
             opacity=0.75,
             line=dict(width=0.5, color="#FFFFFF"),
         ),
         text=grp["origin"] + " → " + grp["destination"],
-        customdata=grp[["shipments", "route_count", "avg_cost_usd"]].values,
+        customdata=grp[["orders", "route_count", "avg_cost_usd"]].values,
         hovertemplate=(
             "<b>%{text}</b><br>"
             "Concentration: %{x:.3f}<br>"
             "Delay rate: %{y:.1f}%<br>"
-            "Shipments: %{customdata[0]}<br>"
+            "Orders: %{customdata[0]}<br>"
             "Routes used: %{customdata[1]}<br>"
             "Avg cost: $%{customdata[2]:.0f}<extra></extra>"
         ),
@@ -884,8 +885,8 @@ if not lane_data.empty:
     m1, m2, m3, m4 = st.columns(4)
     
     metrics = [
-        (m1, "Volume", f"{row['shipments']}", "Total Shipments"),
-        (m2, "Avg Cost", f"${row['avg_cost_usd']:,.0f}", "Per Shipment"),
+        (m1, "Volume", f"{row['orders']}", "Total Orders"),
+        (m2, "Avg Cost", f"${row['avg_cost_usd']:,.0f}", "Per Order"),
         (m3, "Lead Time", f"{row['avg_lead_time_days']}d", "Average Door-to-Door"),
         (m4, "Delay Rate", f"{row['delay_rate_pct']}%", "Reliability Index"),
     ]
@@ -944,12 +945,10 @@ if not lane_data.empty:
         st.markdown('<div class="section-label">Resilience Profile</div>', unsafe_allow_html=True)
         profile = row['redundancy_profile'].replace('_', ' ').title()
         
-        # Mapa de colors consistent
         color_map = {"Single Route": "#EF4444", "Highly Concentrated": "#F59E0B", 
                     "Moderately Concentrated": "#3B82F6", "Well Diversified": "#10B981"}
         p_color = color_map.get(profile, "#6B7280")
         
-        # Afegim un min-height per alinear-ho visualment amb el gràfic
         st.markdown(f"""
         <div style="background: #1A1D27; border: 1px solid #2A2D3A; border-left: 4px solid {p_color}; 
                     border-radius: 8px; padding: 1.5rem; min-height: 240px; display: flex; flex-direction: column; justify-content: center;">

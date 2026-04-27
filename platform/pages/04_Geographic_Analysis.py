@@ -220,35 +220,34 @@ if not df_inter.empty:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 1 — Exposició de fluxos
+# SECTION 1 — Flow Exposure
 # ═══════════════════════════════════════════════
-st.markdown('<div class="section-title">1 · Exposició de fluxos per node</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">1 · Flow exposure per node</div>', unsafe_allow_html=True)
 
-# Toggle ciutat / país
 toggle_col, _ = st.columns([1, 3])
 with toggle_col:
     granularity = st.radio(
-        "Granularitat",
-        options=["Ciutat", "País"],
+        "Granularity",
+        options=["City", "Country"],
         horizontal=True,
         label_visibility="collapsed",
     )
 
-if granularity == "Ciutat" and not df_city.empty:
+if granularity == "City" and not df_city.empty:
     df_mirror = df_city.copy()
     dim_col   = "city"
-    label_out = "Outbound shipments"
-    label_in  = "Inbound shipments"
-    x_title   = "Shipments"
-    # Use degree-based columns if shipment columns not present
+    label_out = "Outbound orders"
+    label_in  = "Inbound orders"
+    x_title   = "Orders"
+    # Use degree-based columns if orders columns not present
     out_col = "outbound"
     in_col  = "inbound"
 elif not df_country.empty:
     df_mirror = df_country.copy()
     dim_col   = "country"
-    label_out = "Outbound shipments"
-    label_in  = "Inbound shipments"
-    x_title   = "Shipments"
+    label_out = "Outbound orders"
+    label_in  = "Inbound orders"
+    x_title   = "Orders"
     out_col   = "outbound"
     in_col    = "inbound"
 else:
@@ -306,8 +305,8 @@ if not df_mirror.empty and out_col in df_mirror.columns:
     )
     st.plotly_chart(fig_mirror, use_container_width=True)
 
-    if granularity == "País":
-        with st.expander("📋 Market share global per país"):
+    if granularity == "Country":
+        with st.expander("📋 Global country market share"):
             df_share = df_country[["country", "region", "pct_outbound", "pct_inbound"]].copy()
             df_share.columns = ["Country", "Region", "Export %", "Import %"]
             st.dataframe(
@@ -324,10 +323,10 @@ if not df_mirror.empty and out_col in df_mirror.columns:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 2 — Detecció de comunitats
+# SECTION 2 — Communities
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · Comunitats logístiques (Louvain)</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">2 · Logistics communities</div>', unsafe_allow_html=True)
 
 # KPIs Louvain
 if not df_louvain.empty:
@@ -338,11 +337,11 @@ if not df_louvain.empty:
 
     # Modularity interpretation
     if modularity < 0.3:
-        mod_label = "Feble"
+        mod_label = "Weak"
     elif modularity < 0.6:
-        mod_label = "Moderat"
+        mod_label = "Moderate"
     else:
-        mod_label = "Fort"
+        mod_label = "Strong"
     mod_color = "#6B7280"
 
     kpi_c1, kpi_c2, kpi_c3, kpi_c4 = st.columns(4)
@@ -374,24 +373,23 @@ if not df_louvain.empty:
     if modularity < 0.3:
         st.markdown("""
         <div class="callout-box" style="margin-top:0.75rem">
-            ⚠ <strong>Modularity baixa:</strong> Els clústers detectats no estan fortament aïllats entre ells.
-            Amb un dataset sintètic de 13 ciutats i fluxos denses, és el resultat esperat —
-            la xarxa és petita i altament interconnectada.
+            ⚠ <strong>Low modularity:</strong> The detected clusters are not strongly isolated from each other.
+            With a synthetic dataset of 13 cities and dense flows, this is the expected result —
+            the network is small and highly interconnected.
         </div>""", unsafe_allow_html=True)
 
 st.markdown("")
 
-# Community cards + buscador
+# Community cards + search bar
 col_cards, col_search = st.columns([2, 1])
 
 with col_cards:
-    st.markdown('<div class="section-label">Composició de cada comunitat</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Community composition</div>', unsafe_allow_html=True)
     if not df_comm.empty:
         for cid in sorted(df_comm["community_id"].unique()):
             cities = sorted(df_comm[df_comm["community_id"] == cid]["city"].tolist())
             color  = comm_color_map.get(cid, "#6B7280")
-            # bg is a tinted version of the color
-            bg_hex = color + "18"  # ~10% opacity via hex alpha
+            bg_hex = color + "18"
 
             tags_html = "".join(
                 f'<span class="city-tag" style="background:{color}22;color:{color}">{c}</span>'
@@ -446,22 +444,31 @@ with col_search:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 3 — Dependències inter-comunitat
+# SECTION 3 —Inter-community dependencies
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">3 · Dependències inter-comunitat</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">3 · Inter-community dependencies</div>', unsafe_allow_html=True)
 
 bridge_lanes = []
 
 if not df_inter.empty:
+    df_inter["routes"] = df_inter["routes"].apply(
+        lambda x: ", ".join(x) if isinstance(x, list) else str(x)
+    )
+    
+    inbound_group = df_inter.groupby("to_community")
 
     inbound_group = df_inter.groupby("to_community")
 
     for comm_id, df_tmp in inbound_group:
-
+        
         unique_edges = df_tmp[
-            ["from_community", "from_city", "to_city", "primary_route"]
-        ].drop_duplicates()
+            ["from_community", "from_city", "to_city", "routes"]
+        ].copy()
+        unique_edges["routes"] = unique_edges["routes"].apply(
+            lambda x: ", ".join(x) if isinstance(x, list) else str(x)
+        )
+        unique_edges = unique_edges.drop_duplicates()
 
         if len(unique_edges) == 1:
             lane = unique_edges.iloc[0]
@@ -470,8 +477,8 @@ if not df_inter.empty:
                 "community": comm_id,
                 "from_city": lane["from_city"],
                 "to_city": lane["to_city"],
-                "route": lane["primary_route"],
-                "shipments": int(df_tmp["shipments"].sum()),
+                "route": lane["routes"],
+                "orders": int(df_tmp["orders"].sum()),
                 "type": "single_inbound_source"
             })
 
@@ -481,7 +488,10 @@ if not df_inter.empty:
     source_only = all_from - all_to
 
     for comm_id in source_only:
-        df_tmp = df_inter[df_inter["from_community"] == comm_id]
+        df_tmp = df_inter[df_inter["from_community"] == comm_id].copy()
+        df_tmp["routes"] = df_tmp["routes"].apply(
+            lambda x: ", ".join(x) if isinstance(x, list) else str(x)
+        )
 
         if not df_tmp.empty:
             lane = df_tmp.iloc[0]
@@ -490,8 +500,8 @@ if not df_inter.empty:
                 "community": comm_id,
                 "from_city": lane["from_city"],
                 "to_city": lane["to_city"],
-                "route": lane["primary_route"],
-                "shipments": int(df_tmp["shipments"].sum()),
+                "route": lane["routes"],
+                "orders": int(df_tmp["orders"].sum()),
                 "type": "source_only"
             })
 
@@ -499,40 +509,46 @@ if not df_inter.empty:
     if bridge_lanes:
         for bl in bridge_lanes:
             if bl["type"] == "single_inbound_source":
-                message = f"""
-                <strong>⚠ Dependència crítica d'entrada — Community {bl['community']}</strong><br>
-                Aquesta comunitat depèn d'una única font d'entrada de la xarxa:<br>
-                <span style="font-family:'IBM Plex Mono',monospace;color:#FCA5A5">
-                    {bl['from_city']} → {bl['to_city']}
-                </span>
-                (ruta {bl['route']}, {bl['shipments']:,} enviaments).<br>
-                Si aquesta connexió falla, la comunitat queda <strong>aïllada d'entrada</strong>.
-                """
-
+                title = f"⚠ Critical inbound dependency — Community {bl['community']}"
+                body = (
+                    "This community depends on a single inbound source in the network:<br>"
+                    f"<span style=\"font-family:'IBM Plex Mono',monospace;color:#FCA5A5\">"
+                    f"{bl['from_city']} → {bl['to_city']}</span><br>"
+                    f"(Routes: {bl['route']} — {bl['orders']:,} orders).<br>"
+                    "If this connection fails, the community becomes "
+                    "<strong>inbound isolated</strong>."
+                )
             elif bl["type"] == "source_only":
-                message = f"""
-                <strong>⚠ Node d'origen — Community {bl['community']}</strong><br>
-                Aquesta comunitat és un punt d'origen de flux dins la xarxa.<br>
-                Tot el volum de sortida depèn de la seva activitat:<br>
-                <span style="font-family:'IBM Plex Mono',monospace;color:#FCA5A5">
-                    {bl['from_city']} → {bl['to_city']}
-                </span>
-                (ruta {bl['route']}, {bl['shipments']:,} enviaments).<br>
-                Si aquesta comunitat falla, <strong>es perd el flux que genera cap a la resta de la xarxa</strong>.
-                """
-            st.markdown(f"""
+                title = f"⚠ Source node — Community {bl['community']}"
+                body = (
+                    "This community acts as a primary source of flow in the network.<br>"
+                    "All outbound volume depends on its activity:<br>"
+                    f"<span style=\"font-family:'IBM Plex Mono',monospace;color:#FCA5A5\">"
+                    f"{bl['from_city']} → {bl['to_city']}</span><br>"
+                    f"(Routes {bl['route']} — {bl['orders']:,} orders).<br>"
+                    "If this community fails, it will "
+                    "<strong>remove generated downstream flow</strong>."
+                )
+            else:
+                continue
+
+            st.markdown(
+                f"""
                 <div class="callout-critical">
-                    {message}
+                    <strong>{title}</strong><br>
+                    {body}
                 </div>
-                """, unsafe_allow_html=True)
+                """,
+                unsafe_allow_html=True
+            )
 
     # Sankey
-    st.markdown('<div class="section-label">Sankey — fluxos agregats entre comunitats</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Sankey — aggregated inter-community flows</div>', unsafe_allow_html=True)
 
     # Aggregate by from_community → to_community
     df_agg = (
         df_inter.groupby(["from_community", "to_community"])
-        .agg(shipments=("shipments", "sum"), primary_route=("primary_route", "first"))
+        .agg(orders=("orders", "sum"), routes=("routes", "first"))
         .reset_index()
     )
 
@@ -540,8 +556,8 @@ if not df_inter.empty:
     all_communities = sorted(
         set(df_agg["from_community"].tolist()) | set(df_agg["to_community"].tolist())
     )
-    df_in  = df_inter.groupby("to_community")["shipments"].sum()
-    df_out = df_inter.groupby("from_community")["shipments"].sum()
+    df_in  = df_inter.groupby("to_community")["orders"].sum()
+    df_out = df_inter.groupby("from_community")["orders"].sum()
     node_labels = [
         f"Comunity {c}<br>IN: {df_in.get(c,0):,} | OUT: {df_out.get(c,0):,}"
         for c in all_communities
@@ -572,16 +588,16 @@ if not df_inter.empty:
         link=dict(
             source=[node_map[r["from_community"]] for _, r in df_agg.iterrows()],
             target=[node_map[r["to_community"]]   for _, r in df_agg.iterrows()],
-            value=df_agg["shipments"].tolist(),
+            value=df_agg["orders"].tolist(),
             color=link_colors,
             label=[
-                f"{r['from_community']}→{r['to_community']}: {int(r['shipments']):,} ships"
+                f"{r['from_community']}→{r['to_community']}: {int(r['orders']):,} orders"
                 for _, r in df_agg.iterrows()
             ],
             hovertemplate=(
                 "From Community %{source.label}<br>"
                 "To Community %{target.label}<br>"
-                "Shipments: %{value:,}<extra></extra>"
+                "Orders: %{value:,}<extra></extra>"
             ),
         ),
     ))
@@ -591,22 +607,22 @@ if not df_inter.empty:
     )
     st.plotly_chart(fig_sankey, use_container_width=True)
     st.caption(
-        "Amplada de les connexions proporcional al volum d'enviaments. "
-        "Color = comunitat d'origen. Hover per veure detall."
+        "Link width represents orders volume. "
+        "Color indicates origin community."
     )
 
-    # Taula sota
-    st.markdown('<div class="section-label">Bridge lanes — connexions inter-comunitat</div>', unsafe_allow_html=True)
+    # Table
+    st.markdown('<div class="section-label">Bridge lanes — inter-comunitity connections</div>', unsafe_allow_html=True)
 
     df_bridge_display = df_inter[[
         "from_community", "to_community", "from_city", "to_city",
-        "shipments", "primary_route"
+        "orders", "routes"
     ]].copy()
 
     df_bridge_display = df_bridge_display.sort_values("from_community", ascending=False)
     df_bridge_display.columns = [
         "From", "To", "From City", "To City",
-        "Shipments", "Primay Route",
+        "Orders", "Routes",
     ]
 
     st.dataframe(

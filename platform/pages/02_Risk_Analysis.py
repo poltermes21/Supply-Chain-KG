@@ -12,7 +12,7 @@ from analysis.queriesv2 import Block2Queries
 st.set_page_config(page_title="Risk Analysis", layout="wide")
 
 # ─────────────────────────────────────────────
-# SHARED STYLE — identical to Block 1
+# SHARED STYLE
 # ─────────────────────────────────────────────
 FONT_SANS   = "IBM Plex Sans, sans-serif"
 FONT_MONO   = "IBM Plex Mono, monospace"
@@ -195,8 +195,7 @@ st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 # ─────────────────────────────────────────────
 driver = get_neo4j_driver()
 
-# Joint risk sliders — inline, above section 4
-# We load them here so cache key is correct
+# Joint risk sliders
 st.sidebar.markdown("### Joint Risk Thresholds")
 geo_thresh     = st.sidebar.slider("Geopolitical Risk ≥", 0.0, 1.0, 0.6, 0.05)
 weather_thresh = st.sidebar.slider("Weather Severity ≥",  0.0, 1.0, 0.6, 0.05)
@@ -223,9 +222,9 @@ for df in [df_global, df_route, df_product]:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 1 — Perfil de risc global
+# SECTION 1 — Global risk profile
 # ═══════════════════════════════════════════════
-st.markdown('<div class="section-title">1 · Perfil de risc global</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">1 · Global risk profile</div>', unsafe_allow_html=True)
 
 # — Max values for proportional progress bars —
 max_disruption = df_global["disruption_rate_pct"].max()
@@ -241,7 +240,7 @@ for i, level in enumerate(RISK_ORDER):
     color = RISK_COLORS[level]
 
     pct_total    = row["pct_total"]
-    n_orders     = int(row["total_shipments"])
+    n_orders     = int(row["total_orders"])
     risk_score   = row["avg_combined_risk_score"]
     disruption   = row["disruption_rate_pct"]
     delay_rate   = row["delay_rate_pct"]
@@ -288,8 +287,8 @@ for i, level in enumerate(RISK_ORDER):
 
 st.markdown("")
 
-# — Correlació risc → outcome (dot + line) —
-st.markdown('<div class="section-label">Validació del model — el risc prediu la disrupció?</div>', unsafe_allow_html=True)
+# — Risk correlation → outcome (dot + line) —
+st.markdown('<div class="section-label">Model validation — does risk predict disruption?</div>', unsafe_allow_html=True)
 
 df_corr = df_global.copy()
 df_corr["risk_level"] = pd.Categorical(df_corr["risk_level"], categories=RISK_ORDER, ordered=True)
@@ -350,16 +349,16 @@ fig_corr.update_yaxes(
 )
 fig_corr.update_xaxes(**styled_xaxis())
 st.plotly_chart(fig_corr, use_container_width=True)
-st.caption("Les barres (eix dret) mostren el risk score mitjà per nivell. Les línies (eix esquerre) validen que la disrupció i el retard augmenten monotònicament amb el risc assignat.")
+st.caption("Bars (right axis) show the average risk score per level. Lines (left axis) validate that disruption and delay increase monotonically with assigned risk.")
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 2 — Concentració del risc
+# SECTION 2 — Risk Concentration
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · On es concentra el risc</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">2 · Risk Concentration</div>', unsafe_allow_html=True)
 
-tab_route, tab_product = st.tabs(["Per ruta", "Per categoria de producte"])
+tab_route, tab_product = st.tabs(["By Route", "By Product"])
 
 def stacked_risk_bar(df, dimension_col, title_caption):
     """Stacked bar geo+weather + combined risk line (secondary axis)."""
@@ -368,7 +367,7 @@ def stacked_risk_bar(df, dimension_col, title_caption):
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     fig.add_trace(go.Bar(
-        name="Geopolític",
+        name="Geopolitical",
         x=df[dimension_col],
         y=df["avg_geopolitical_risk"],
         marker_color="#EF4444",
@@ -377,7 +376,7 @@ def stacked_risk_bar(df, dimension_col, title_caption):
     ), secondary_y=False)
 
     fig.add_trace(go.Bar(
-        name="Meteorològic",
+        name="Weather",
         x=df[dimension_col],
         y=df["avg_weather_severity"],
         marker_color="#3B82F6",
@@ -386,7 +385,7 @@ def stacked_risk_bar(df, dimension_col, title_caption):
     ), secondary_y=False)
 
     fig.add_trace(go.Scatter(
-        name="Avg Combined Risk Score (eix dret)",
+        name="Avg Combined Risk Score (right axis)",
         x=df[dimension_col],
         y=df["avg_combined_risk_score"],
         mode="lines+markers",
@@ -420,30 +419,28 @@ def stacked_risk_bar(df, dimension_col, title_caption):
 with tab_route:
     stacked_risk_bar(
         df_route, "route",
-        "Rutes ordenades per avg_combined_risk_score DESC. "
-        "La proporció de cada barra revela la naturalesa dominant del risc — geopolític (vermell) vs meteorològic (blau)."
+        "Routes sorted by Avg Combined Risk Score DESC. "
+        "Bar composition shows dominant risk driver — geopolitical (red) vs weather (blue)."
     )
 
 with tab_product:
     stacked_risk_bar(
         df_product, "product_category",
-        "Categories ordenades per avg_combined_risk_score DESC. "
-        "La proporció revela quin tipus de risc domina per cada categoria de producte."
+        "Products sorted by Avg Combined Risk Score DESC. "
+        "Bar composition shows which risk type dominates each product category."
     )
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 3 — Risc per node geogràfic (mirror)
+# SECTION 3 — Risk by Geographic Node
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">3 · Risc per node geogràfic</div>', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Mirror chart — outbound (esquerra) vs inbound (dreta) per combined risk score</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">3 · Risk by geographic node</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Mirror chart — outbound (left) vs inbound (right) by combined risk score</div>', unsafe_allow_html=True)
 
-# Build unified city list sorted by combined risk (outbound as reference)
 all_cities = sorted(
     set(df_outbound["city"].tolist()) | set(df_inbound["city"].tolist())
 )
-
 # Merge both sides on city
 df_mirror = pd.DataFrame({"city": all_cities})
 df_mirror = df_mirror.merge(
@@ -570,16 +567,16 @@ fig_mirror.update_annotations(
 
 st.plotly_chart(fig_mirror, use_container_width=True)
 st.caption(
-    "Ciutats presents a ambdós costats (ex: Shanghai) mostren el seu perfil de risc com a origen (esquerra) i com a destí (dreta). "
-    "Barres sòlides = outbound, translúcides = inbound. Color vermell = risc geopolític, blau = risc meteorològic."
+    "Cities present on both sides (e.g., Shanghai) show their risk profile as origin (left) and destination (right). "
+    "Solid bars = outbound, translucent = inbound. Red = geopolitical risk, blue = weather risk."
 )
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 4 — Exposició conjunta (Joint Risk)
+# SECTION 4 — Joint Risk Exposure
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">4 · Exposició conjunta — coincidència de riscos</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">4 · Joint Exposure — risk overlap</div>', unsafe_allow_html=True)
 
 # Inline threshold display
 th_col1, th_col2, th_col3 = st.columns([1, 1, 3])
@@ -613,10 +610,10 @@ st.markdown("")
 if df_joint.empty:
     st.markdown("""
     <div class="callout-box">
-        Cap enviament compleix simultàniament els dos thresholds de risc configurats.
+        No orders meet both configured risk thresholds simultaneously.
     </div>""", unsafe_allow_html=True)
 else:
-    total_affected = int(df_joint["total_shipments"].sum())
+    total_affected = int(df_joint["total_orders"].sum())
     avg_delay_joint = df_joint["avg_delay_days"].mean()
     n_routes = len(df_joint)
 
@@ -627,7 +624,7 @@ else:
                     border-radius:8px;padding:0.8rem 1rem;">
             <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
                         text-transform:uppercase;letter-spacing:0.1em;color:#6B7280">
-                Enviaments afectats
+                Affected orders
             </div>
             <div style="font-size:1.5rem;font-weight:700;color:#EF4444;
                         font-family:'IBM Plex Sans',sans-serif">{total_affected:,}</div>
@@ -638,7 +635,7 @@ else:
                     border-radius:8px;padding:0.8rem 1rem;">
             <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
                         text-transform:uppercase;letter-spacing:0.1em;color:#6B7280">
-                Rutes exposades
+                Exposed Routes
             </div>
             <div style="font-size:1.5rem;font-weight:700;color:#F59E0B;
                         font-family:'IBM Plex Sans',sans-serif">{n_routes}</div>
@@ -658,17 +655,17 @@ else:
     st.markdown("")
 
     # Bar chart: routes by volume, color = avg_combined_risk_score
-    df_joint_sorted = df_joint.sort_values("total_shipments", ascending=True)
+    df_joint_sorted = df_joint.sort_values("total_orders", ascending=True)
 
     fig_joint = go.Figure(go.Bar(
-        x=df_joint_sorted["total_shipments"],
+        x=df_joint_sorted["total_orders"],
         y=df_joint_sorted["route"],
         orientation="h",
         marker=dict(
             color=df_joint_sorted["avg_combined_risk_score"],
             colorscale="RdYlGn_r",
             colorbar=dict(
-                title=dict(text="Risk Score", font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR)),
+                title=dict(text="Combined Risk Score", font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR)),
                 tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR),
                 thickness=12,
                 x=1.02,
@@ -677,9 +674,9 @@ else:
             showscale=True,
         ),
         text=[
-            f"{int(v):,} ships · {r:.1f}% disrupt · {d:.1f}d delay"
+            f"{int(v):,} orders · {r:.1f}% disrupt · {d:.1f}d delay"
             for v, r, d in zip(
-                df_joint_sorted["total_shipments"],
+                df_joint_sorted["total_orders"],
                 df_joint_sorted["disruption_rate_pct"],
                 df_joint_sorted["avg_delay_days"],
             )
@@ -688,7 +685,7 @@ else:
         textfont=dict(size=9, family=FONT_MONO, color=TEXT_COLOR),
         hovertemplate=(
             "<b>%{y}</b><br>"
-            "Shipments: %{x:,}<br>"
+            "Orders: %{x:,}<br>"
             "Disruption: %{customdata[0]:.1f}%<br>"
             "Delay Rate: %{customdata[1]:.1f}%<br>"
             "Avg Delay: %{customdata[2]:.2f}d<extra></extra>"
@@ -698,25 +695,25 @@ else:
     ))
     fig_joint.update_layout(
         **base_layout(height=max(220, len(df_joint) * 55)),
-        xaxis=styled_xaxis(title="Total Shipments"),
+        xaxis=styled_xaxis(title="Total Orders"),
         yaxis=styled_yaxis(showgrid=False),
         margin=dict(l=12, r=120, t=12, b=12),
     )
     st.plotly_chart(fig_joint, use_container_width=True)
-    st.caption("Rutas amb exposició simultània a risc geopolític i meteorològic per sobre del threshold. Color = combined risk score (vermell = més alt).")
+    st.caption("Routes with simultaneous exposure to geopolitical and weather risk above the threshold. Color = combined risk score (red = higher).")
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 5 — Lanes crítiques
+# SECTION 5 — Critical Lanes
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">5 · Lanes crítiques per risc i volum</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">5 · Critical lanes by risk and volume</div>', unsafe_allow_html=True)
 
 # — Controls —
 ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1, 2, 2])
 
 metric_labels = {
-    "shipments": "Volum (shipments)",
+    "orders": "Volume",
     "disrupted_rate_pct": "Disruption rate",
     "delay_rate_pct": "Delay rate",
     "avg_combined_risk_score": "Risk score"
@@ -724,7 +721,7 @@ metric_labels = {
 
 with ctrl_col2:
     metric = st.selectbox(
-        "Highlight Top per mètrica",
+        "Highlight Top by metric",
         options=list(metric_labels.keys()),
         format_func=lambda x: metric_labels[x],
         index=0
@@ -739,16 +736,16 @@ with ctrl_col3:
 
 lane_options = [
     f"{row['origin']} → {row['destination']}"
-    for _, row in df_lanes.sort_values("shipments", ascending=False).iterrows()
+    for _, row in df_lanes.sort_values("orders", ascending=False).iterrows()
 ]
 
 selected_lanes = st.multiselect(
-    "Filtrar lanes específiques (opcional)",
+    "Filter specific lanes (optional)",
     options=lane_options,
     default=[]
 )
 
-# — Filtering —
+# Filtering
 df_plot = df_lanes.copy()
 
 if selected_lanes:
@@ -763,13 +760,13 @@ if selected_lanes:
         )
     ]
 
-# — Slider dinámico DESPUÉS del filtering —
+# Dynamic slider 
 n_lanes = len(df_plot)
 
 if n_lanes > 1:
     with ctrl_col1:
         top_n = st.slider(
-            "Top N a destacar",
+            "Top N to highlight",
             1,
             n_lanes,
             min(5, n_lanes)
@@ -789,7 +786,7 @@ else:
             font-size:0.8rem;
             color:#9CA3AF;
         ">
-            Només hi ha 1 lane disponible
+            Only 1 lane available
         </div>
         """, unsafe_allow_html=True)
 
@@ -800,7 +797,7 @@ top_ids = set(df_top.index)
 # — Mode switch —
 df_plot = df_top.copy() if view_mode == "Only Top" else df_plot.copy()
 
-# — Labels (solo TOP, incluso en Only Top) —
+# — Labels —
 labels = [
     f"{row['origin']}→{row['destination']}" if idx in top_ids else ""
     for idx, row in df_plot.iterrows()
@@ -838,7 +835,7 @@ fig_lanes.add_vline(
 )
 
 # — Bubble styling —
-sizes = df_plot["shipments"] / df_lanes["shipments"].max() * 40 + 6
+sizes = df_plot["orders"] / df_lanes["orders"].max() * 40 + 6
 
 border_colors = [
     "#F59E0B" if idx in top_ids else "#0F1117"
@@ -862,7 +859,7 @@ if view_mode == "Only Top":
 
 # — Customdata —
 customdata = list(zip(
-    df_plot["shipments"],
+    df_plot["orders"],
     df_plot["delay_rate_pct"],
     df_plot["avg_combined_risk_score"],
     df_plot["origin"] + "→" + df_plot["destination"]
@@ -889,7 +886,7 @@ fig_lanes.add_trace(go.Scatter(
     customdata=customdata,
     hovertemplate=(
         "<b>%{customdata[3]}</b><br>"
-        "Shipments: %{customdata[0]:,}<br>"
+        "Orders: %{customdata[0]:,}<br>"
         "Disruption: %{x:.1f}%<br>"
         "Delay: %{customdata[1]:.1f}%<br>"
         "Risk: %{y:.4f}<extra></extra>"
@@ -914,7 +911,7 @@ fig_lanes.update_layout(
 st.plotly_chart(fig_lanes, use_container_width=True)
 
 st.caption(
-    f"Top {top_n} lanes destacades per {metric_labels[metric]}. "
-    "Etiquetes visibles només per les lanes destacades. "
-    "Mode 'Only Top' elimina el context per focus directe."
+    f"Top {top_n} highlighted lanes by {metric_labels[metric]}. "
+    "Labels visible only for highlighted lanes. "
+    "‘Only Top’ mode removes context for direct focus."
 )

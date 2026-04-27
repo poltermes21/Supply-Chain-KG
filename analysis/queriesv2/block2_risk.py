@@ -26,13 +26,13 @@ class Block2Queries:
 
     RISK_LEVEL_GLOBAL = """
         MATCH (o:Order)
-        WITH count(o) AS total_orders
+        WITH count(o) AS global_orders
 
         MATCH (o:Order)-[:HAS_RISK]->(ra:RiskAssessment)
         WITH
-            total_orders,
+            global_orders,
             ra.risk_level AS risk_level,
-            count(o) AS total_shipments,
+            count(o) AS total_orders,
             avg(ra.combined_risk_score) AS avg_combined_risk_score,
             avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END) AS disruption_rate,
             avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate,
@@ -40,8 +40,8 @@ class Block2Queries:
 
         RETURN
             risk_level,
-            total_shipments,
-            round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total,
+            total_orders,
+            round(100.0 * total_orders / toFloat(global_orders), 2) AS pct_total,
             round(avg_combined_risk_score, 4) AS avg_combined_risk_score,
             round(100.0 * disruption_rate, 2) AS disruption_rate_pct,
             round(100.0 * delay_rate, 2) AS delay_rate_pct,
@@ -63,7 +63,7 @@ class Block2Queries:
             (o)-[:HAS_RISK]->(ra:RiskAssessment)
         RETURN
             r.id AS route,
-            count(o) AS total_shipments,
+            count(o) AS total_orders,
             round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
             round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
             round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
@@ -79,7 +79,7 @@ class Block2Queries:
             (o)-[:HAS_RISK]->(ra:RiskAssessment)
         RETURN
             p.name AS product_category,
-            count(o) AS total_shipments,
+            count(o) AS total_orders,
             round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
             round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
             round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
@@ -95,7 +95,7 @@ class Block2Queries:
             (o)-[:HAS_RISK]->(ra:RiskAssessment)
         RETURN
             c.id AS city,
-            count(o) AS total_shipments,
+            count(o) AS total_orders,
             round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
             round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
             round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
@@ -112,7 +112,7 @@ class Block2Queries:
             (o)-[:HAS_RISK]->(ra:RiskAssessment)
         RETURN
             c.id AS city,
-            count(o) AS total_shipments,
+            count(o) AS total_orders,
             round(avg(ra.combined_risk_score), 4) AS avg_combined_risk_score,
             round(avg(ra.geopolitical_risk_index), 4) AS avg_geopolitical_risk,
             round(avg(ra.weather_severity_index), 2) AS avg_weather_severity,
@@ -132,7 +132,7 @@ class Block2Queries:
         MATCH (o)-[:AFFECTED_BY]->(d:DisruptionType)
 
         WITH r,
-            count(o) AS total_shipments,
+            count(o) AS total_orders,
             avg(ra.combined_risk_score) AS avg_risk,
             avg(o.delay_days) AS avg_delay,
             avg(CASE WHEN o.is_disrupted THEN 1.0 ELSE 0.0 END) AS disruption_rate,
@@ -142,12 +142,12 @@ class Block2Queries:
         RETURN
             r.id AS route,
             disruption_types,
-            total_shipments,
+            total_orders,
             round(avg_risk, 4) AS avg_combined_risk_score,
             round(avg_delay, 2) AS avg_delay_days,
             round(100.0 * disruption_rate, 2) AS disruption_rate_pct,
             round(100.0 * delay_rate, 2) AS delay_rate_pct
-        ORDER BY total_shipments DESC
+        ORDER BY total_orders DESC
     """
 
     # 2.7 CRITICAL OD LANES BY RISK
@@ -157,11 +157,11 @@ class Block2Queries:
         RETURN
             orig.id AS origin,
             dest.id AS destination,
-            f.shipments AS shipments,
+            f.orders AS orders,
             round(f.avg_combined_risk_score, 4) AS avg_combined_risk_score,
             round(f.disrupted_rate_pct, 2) AS disrupted_rate_pct,
             round(f.delay_rate_pct, 2) AS delay_rate_pct
-        ORDER BY avg_combined_risk_score DESC, disrupted_rate_pct DESC, shipments DESC
+        ORDER BY avg_combined_risk_score DESC, disrupted_rate_pct DESC, orders DESC
     """
 
     # EXECUTION METHODS

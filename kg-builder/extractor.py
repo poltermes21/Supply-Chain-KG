@@ -520,7 +520,7 @@ class KGExtractor:
                 'from': origin,
                 'to': destination,
 
-                'shipments': int(len(group)),
+                'orders': int(len(group)),
                 'total_weight_kg': int(group['Order_Weight_Kg'].sum()),
 
                 'route_count': int(group['Route_Type'].nunique()),

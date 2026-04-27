@@ -39,16 +39,16 @@ class Block1Queries:
             round(avg(o.cost_per_kg), 2) AS avg_cost_per_kg
     """
 
-    # 1.2 SHIPMENT DISTRIBUTION
+    # 1.2 ORDER DISTRIBUTION
 
-    SHIPMENTS_BY_ROUTE = """
+    ORDERS_BY_ROUTE = """
         MATCH (o:Order)
-        WITH count(o) AS total_orders
+        WITH count(o) AS global_orders
 
         MATCH (o:Order)-[:SHIPPED_VIA]->(r:Route)
         WITH r,
-            total_orders,
-            count(o) AS total_shipments,
+            global_orders,
+            count(o) AS total_orders,
             avg(o.actual_lead_time_days) AS avg_lead_time,
             avg(o.shipping_cost_usd) AS avg_cost,
             avg(o.delay_days) AS avg_delay_days,
@@ -56,57 +56,57 @@ class Block1Queries:
 
         RETURN
             r.id AS route,
-            total_shipments,
-            round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total,
+            total_orders,
+            round(100.0 * total_orders / toFloat(global_orders), 2) AS pct_total,
             round(avg_lead_time, 2) AS avg_lead_time_days,
             round(avg_cost, 2) AS avg_cost_usd,
             round(avg_delay_days, 2) AS avg_delay_days,
             round(100.0 * delay_rate, 2) AS delay_rate_pct
-        ORDER BY total_shipments DESC
+        ORDER BY total_orders DESC
     """
 
-    SHIPMENTS_BY_TRANSPORT_MODE = """
+    ORDERS_BY_TRANSPORT_MODE = """
         MATCH (o:Order)
-        WITH count(o) AS total_orders
+        WITH count(o) AS global_orders
 
         MATCH (o:Order)-[:USES_MODE]->(m:TransportMode)
         WITH m,
-            total_orders,
-            count(o) AS total_shipments,
+            global_orders,
+            count(o) AS total_orders,
             avg(o.actual_lead_time_days) AS avg_lead_time,
             avg(o.shipping_cost_usd) AS avg_cost,
             avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate
 
         RETURN
             m.id AS transport_mode,
-            total_shipments,
-            round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total,
+            total_orders,
+            round(100.0 * total_orders / toFloat(global_orders), 2) AS pct_total,
             round(avg_lead_time, 2) AS avg_lead_time_days,
             round(avg_cost, 2) AS avg_cost_usd,
             round(100.0 * delay_rate, 2) AS delay_rate_pct
-        ORDER BY total_shipments DESC
+        ORDER BY total_orders DESC
     """
 
-    SHIPMENTS_BY_PRODUCT_CATEGORY = """
+    ORDERS_BY_PRODUCT_CATEGORY = """
         MATCH (o:Order)
-        WITH count(o) AS total_orders
+        WITH count(o) AS global_orders
 
         MATCH (o:Order)-[:TRANSPORTS]->(p:ProductCategory)
         WITH p,
-            total_orders,
-            count(o) AS total_shipments,
+            global_orders,
+            count(o) AS total_orders,
             avg(o.order_weight_kg) AS avg_weight,
             avg(o.shipping_cost_usd) AS avg_cost,
             avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END) AS delay_rate
 
         RETURN
             p.name AS product_category,
-            total_shipments,
-            round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total,
+            total_orders,
+            round(100.0 * total_orders / toFloat(global_orders), 2) AS pct_total,
             round(avg_weight, 2) AS avg_weight_kg,
             round(avg_cost, 2) AS avg_cost_usd,
             round(100.0 * delay_rate, 2) AS delay_rate_pct
-        ORDER BY total_shipments DESC
+        ORDER BY total_orders DESC
     """
     
     # 1.4. PRODUCT DISTRIBUTION
@@ -116,9 +116,9 @@ class Block1Queries:
             (o)-[:SHIPPED_VIA]->(r:Route)
         WITH r.id AS route,
             p.name AS product,
-            count(o) AS total_shipments
-        RETURN route, product, total_shipments
-        ORDER BY route, total_shipments DESC
+            count(o) AS total_orders
+        RETURN route, product, total_orders
+        ORDER BY route, total_orders DESC
     """
     
 
@@ -126,17 +126,17 @@ class Block1Queries:
 
     DELAY_SEVERITY_DISTRIBUTION = """
         MATCH (o:Order)
-        WITH count(o) AS total_orders
+        WITH count(o) AS global_orders
 
         MATCH (o:Order)
-        WITH total_orders,
+        WITH global_orders,
             o.delay_severity AS delay_severity,
-            count(o) AS total_shipments
+            count(o) AS total_orders
 
         RETURN
             delay_severity,
-            total_shipments,
-            round(100.0 * total_shipments / toFloat(total_orders), 2) AS pct_total
+            total_orders,
+            round(100.0 * total_orders / toFloat(global_orders), 2) AS pct_total
         ORDER BY
             CASE delay_severity
                 WHEN 'none' THEN 1
@@ -155,7 +155,7 @@ class Block1Queries:
         RETURN
             orig.id AS origin,
             dest.id AS destination,
-            f.shipments AS shipments,
+            f.orders AS orders,
             f.route_count AS route_count,
             f.routes_used AS routes_used,
             f.route_share AS route_share,
@@ -171,7 +171,7 @@ class Block1Queries:
             round(f.avg_lead_time_days, 2) AS avg_lead_time_days
         ORDER BY
             f.route_concentration DESC,
-            f.shipments DESC
+            f.orders DESC
     """
     
     # 1.5 TEMPORAL TREND
@@ -207,16 +207,16 @@ class Block1Queries:
         return run_query(driver, Block1Queries.GLOBAL_BASELINE_KPIS)
 
     @staticmethod
-    def shipments_by_route(driver) -> pd.DataFrame:
-        return run_query(driver, Block1Queries.SHIPMENTS_BY_ROUTE)
+    def orders_by_route(driver) -> pd.DataFrame:
+        return run_query(driver, Block1Queries.ORDERS_BY_ROUTE)
 
     @staticmethod
-    def shipments_by_transport_mode(driver) -> pd.DataFrame:
-        return run_query(driver, Block1Queries.SHIPMENTS_BY_TRANSPORT_MODE)
+    def orders_by_transport_mode(driver) -> pd.DataFrame:
+        return run_query(driver, Block1Queries.ORDERS_BY_TRANSPORT_MODE)
 
     @staticmethod
-    def shipments_by_product_category(driver) -> pd.DataFrame:
-        return run_query(driver, Block1Queries.SHIPMENTS_BY_PRODUCT_CATEGORY)
+    def orders_by_product_category(driver) -> pd.DataFrame:
+        return run_query(driver, Block1Queries.ORDERS_BY_PRODUCT_CATEGORY)
 
     @staticmethod
     def product_distribution(driver) -> pd.DataFrame:
@@ -244,9 +244,9 @@ class Block1Queries:
         """
         return {
             "global_baseline_kpis":         Block1Queries.global_baseline_kpis(driver),
-            "shipments_by_route":           Block1Queries.shipments_by_route(driver),
-            "shipments_by_transport_mode":  Block1Queries.shipments_by_transport_mode(driver),
-            "shipments_by_product":         Block1Queries.shipments_by_product_category(driver),
+            "orders_by_route":           Block1Queries.orders_by_route(driver),
+            "orders_by_transport_mode":  Block1Queries.orders_by_transport_mode(driver),
+            "orders_by_product":         Block1Queries.orders_by_product_category(driver),
             "product_distribution":         Block1Queries.product_distribution(driver),
             "delay_severity_distribution":  Block1Queries.delay_severity_distribution(driver),
             "od_redundancy_profile":        Block1Queries.od_redundancy_profile(driver),

@@ -38,7 +38,7 @@ class Block4Queries:
                 CITY_FLOW: {
                     orientation: 'UNDIRECTED',
                     properties: [
-                        'shipments',
+                        'orders',
                         'avg_cost_usd',
                         'avg_lead_time_days',
                         'avg_combined_risk_score',
@@ -73,7 +73,7 @@ class Block4Queries:
     COUNTRY_FLOW_EXPOSURE = """
         CALL {
             MATCH (:City)-[f:CITY_FLOW]->(:City)
-            RETURN sum(f.shipments) AS network_shipments
+            RETURN sum(f.orders) AS network_orders
         }
 
         MATCH (c:City)-[:LOCATED_IN]->(cn:Country)
@@ -81,26 +81,26 @@ class Block4Queries:
         CALL {
             WITH c
             OPTIONAL MATCH (c)-[out:CITY_FLOW]->()
-            RETURN sum(out.shipments) AS outbound
+            RETURN sum(out.orders) AS outbound
         }
 
         CALL {
             WITH c
             OPTIONAL MATCH ()-[inc:CITY_FLOW]->(c)
-            RETURN sum(inc.shipments) AS inbound
+            RETURN sum(inc.orders) AS inbound
         }
 
-        WITH cn, network_shipments,
+        WITH cn, network_orders,
             sum(outbound) AS outbound,
             sum(inbound) AS inbound
 
         RETURN
-            cn.country_name AS country,
+            cn.name AS country,
             cn.region AS region,
             outbound,
             inbound,
-            round(100.0 * outbound / network_shipments, 2) AS pct_outbound,
-            round(100.0 * inbound / network_shipments, 2) AS pct_inbound
+            round(100.0 * outbound / network_orders, 2) AS pct_outbound,
+            round(100.0 * inbound / network_orders, 2) AS pct_inbound
         ORDER BY (outbound + inbound) DESC
     """
 
@@ -108,7 +108,7 @@ class Block4Queries:
 
     LOUVAIN_WRITE_COMMUNITY_ID = """
         CALL gds.louvain.write('city_flow_undirected', {
-            relationshipWeightProperty: 'shipments',
+            relationshipWeightProperty: 'orders',
             writeProperty: 'community_id'
         })
         YIELD communityCount, modularity, nodePropertiesWritten
@@ -141,10 +141,10 @@ class Block4Queries:
             b.id AS to_city,
             a.community_id AS from_community,
             b.community_id AS to_community,
-            f.shipments AS shipments,
-            f.primary_route AS primary_route,
+            f.orders AS orders,
+            f.routes_used AS routes,
             round(f.avg_lead_time_days, 2) AS avg_lead_time_days
-        ORDER BY shipments DESC
+        ORDER BY orders DESC
     """
 
     # EXECUTION HELPERS
