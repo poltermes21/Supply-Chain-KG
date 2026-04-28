@@ -318,6 +318,22 @@ with tab_route:
                 with col_san:
                     st.markdown('<div class="section-label">Reroutability — Sankey by shock status</div>',
                                 unsafe_allow_html=True)
+                    
+                    # — Legend —
+                    leg_cols = st.columns(len(SHOCK_STATUS))
+                    for i, (key, meta) in enumerate(SHOCK_STATUS.items()):
+                        with leg_cols[i]:
+                            st.markdown(f"""
+                            <div style="display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.75rem">
+                                <div style="min-width:10px;height:10px;border-radius:2px;
+                                            background:{meta['color']};margin-top:3px;flex-shrink:0"></div>
+                                <div>
+                                    <div style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;
+                                                font-weight:600;color:{meta['color']};letter-spacing:0.05em">
+                                        {meta['label']}
+                                    </div>
+                                </div>
+                            </div>""", unsafe_allow_html=True)
 
                     status_nodes = list(SHOCK_STATUS.keys())
                     city_nodes   = sorted(
@@ -432,7 +448,29 @@ with tab_route:
                 st.markdown('<div class="section-label">Penalty estimate — cost & delay per observed rerouting</div>',
                             unsafe_allow_html=True)
 
-                n_no_alt = (df_penalty["rerouting_feasibility"] == "no_observed_alternative").sum()
+                # — Filters —
+                f1, f2, f3 = st.columns(3)
+                with f1:
+                    origin_options = ["All"] + sorted(df_penalty["origin"].unique().tolist())
+                    pen_origin = st.selectbox("Origin", origin_options, key="pen_origin")
+                with f2:
+                    dest_options = ["All"] + sorted(df_penalty["destination"].unique().tolist())
+                    pen_dest = st.selectbox("Destination", dest_options, key="pen_dest")
+                with f3:
+                    route_options = ["All"] + sorted(df_penalty["blocked_route"].unique().tolist())
+                    pen_route = st.selectbox("Blocked Route", route_options, key="pen_route")
+
+                # Apply filters
+                df_pen_filtered = df_penalty.copy()
+                if pen_origin != "All":
+                    df_pen_filtered = df_pen_filtered[df_pen_filtered["origin"] == pen_origin]
+                if pen_dest != "All":
+                    df_pen_filtered = df_pen_filtered[df_pen_filtered["destination"] == pen_dest]
+                if pen_route != "All":
+                    df_pen_filtered = df_pen_filtered[df_pen_filtered["blocked_route"] == pen_route]
+
+                # Alert coherent with current filter
+                n_no_alt = (df_pen_filtered["rerouting_feasibility"] == "no_observed_alternative").sum()
                 if n_no_alt > 0:
                     st.markdown(f"""
                     <div class="callout-critical">
@@ -442,34 +480,39 @@ with tab_route:
                         The real penalty would be unknown until a new route is activated.
                     </div>""", unsafe_allow_html=True)
 
-                df_pen_disp = df_penalty[[
-                    "origin", "destination", "blocked_route", "affected_orders",
-                    "rerouting_feasibility", "alternative_route",
-                    "est_cost_delta_usd", "est_lead_delta_days"
-                ]].copy()
-                
-                df_pen_disp["rerouting_feasibility"] = df_pen_disp["rerouting_feasibility"].replace({
-                    "no_observed_alternative": "No observed alternative",
-                    "reroutable_from_history": "Reroutable"
-                })
-                df_pen_disp.columns = [
-                    "Origin", "Destination", "Blocked Route",
-                    "Orders", "Feasibility", "Alternative Route",
-                    "Cost Δ (USD)", "Lead Time Δ (d)"
-                ]
+                if df_pen_filtered.empty:
+                    st.info("No lanes match the selected filters.")
+                else:
+                    df_pen_disp = df_pen_filtered[[
+                        "origin", "destination", "blocked_route", "affected_orders",
+                        "rerouting_feasibility", "alternative_route",
+                        "est_cost_delta_usd", "est_lead_delta_days"
+                    ]].copy()
 
-                st.dataframe(
-                    df_pen_disp.sort_values("Orders", ascending=False),
-                    hide_index=True, use_container_width=True,
-                    column_config={
-                        "Orders": st.column_config.NumberColumn("Orders", format="%d"),
-                        "Cost Δ (USD)": st.column_config.NumberColumn("Cost Δ ($)", format="%.2f"),
-                    }
-                )
-                st.caption(
-                    "Cost Δ and Lead Time Δ based on observed alternative orders history. "
-                    "Positive values = rerouting is more expensive/slower than the original route."
-                )
+                    df_pen_disp["rerouting_feasibility"] = df_pen_disp["rerouting_feasibility"].replace({
+                        "no_observed_alternative": "No observed alternative",
+                        "reroutable_from_history": "Reroutable"
+                    })
+                    df_pen_disp.columns = [
+                        "Origin", "Destination", "Blocked Route",
+                        "Orders", "Feasibility", "Alternative Route",
+                        "Cost Δ (USD)", "Lead Time Δ (d)"
+                    ]
+                    
+                    st.caption("Tip: you can sort directly in the table by clicking on column headers.")
+
+                    st.dataframe(
+                        df_pen_disp.sort_values("Orders", ascending=False),
+                        hide_index=True, use_container_width=True,
+                        column_config={
+                            "Orders": st.column_config.NumberColumn("Orders", format="%d"),
+                            "Cost Δ (USD)": st.column_config.NumberColumn("Cost Δ ($)", format="%.2f"),
+                        }
+                    )
+                    st.caption(
+                        "Cost Δ and Lead Time Δ based on observed alternative orders history. "
+                        "Positive values = rerouting is more expensive/slower than the original route."
+                    )
 
     elif run_route and not blocked_routes:
         st.info("Please select one or more routes to simulate a blockade.")

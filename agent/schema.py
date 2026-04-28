@@ -56,7 +56,7 @@ KG_SCHEMA_PROMPT = """
 **RiskAssessment** (15000 nodes) — unique constraint on `id`
   - id                        String    — unique shipment identifier e.g "ORD-04F86DAA"
   
-  - risk_level                String   — risk category based on combined_risk_score:
+  - risk_level                String    — risk category based on combined_risk_score:
                                          "low" (< 0.3)
                                          "medium" (< 0.6)
                                          "high" (< 0.8)
@@ -80,6 +80,10 @@ KG_SCHEMA_PROMPT = """
   - outbound_degree           Long     — number of outgoing shipments from the city
   - inbound_degree            Long     — number of incoming shipments to the city
   - community_id              Long     — GDS Louvain community detection result (graph cluster id)
+  - weighted_degree_score     Double   — GDS degree centrality weighted by orders volume (sum of ALL incident CITY_FLOW.orders, both inbound and outbound, since the graph projection is UNDIRECTED)
+  - betweenness_score         Double   — GDS betweenness centrality score (fraction of shortest paths passing through this city, computed on undirected CITY_FLOW graph)
+  - degree_score              Double   — GDS degree centrality (unweighted) (number of unique incident CITY_FLOW relationships, both directions counted, undirected projection)
+  - pagerank_score            Double   — GDS PageRank score weighted by orders volume (structural influence in the undirected network, higher = more central to overall flow routing)
 
 **Country** (11 nodes) — unique constraint on `id`
   - id                        String   — ISO country code (e.g. "US", "CN", "DE")
@@ -281,4 +285,11 @@ RETURN o.id AS order_id, d.full_name AS disruption,
        m.name AS failed_mitigation, r.combined_risk_score AS risk_score
 ORDER BY risk_score DESC
 LIMIT 20
+
+// Shortest path between Tokyo and New York optimized by cost.
+MATCH (start:City {id: 'Tokyo'}), (end:City {id: 'New York'})
+CALL apoc.algo.dijkstra(start, end, 'CITY_FLOW>', 'avg_cost_usd') YIELD path, weight
+RETURN [city IN nodes(path) | city.id] AS path, weight AS total_cost
+LIMIT 1
+
 """

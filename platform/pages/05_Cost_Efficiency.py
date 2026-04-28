@@ -302,7 +302,7 @@ if not df_baseline.empty:
 # SECTION 2 — Disruption cost profile
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · Disruption cost profile/div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">2 · Disruption cost profile</div>', unsafe_allow_html=True)
 
 if not df_by_type.empty:
     col_bar, col_radar = st.columns([5, 4])
