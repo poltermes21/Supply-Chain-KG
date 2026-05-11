@@ -10,6 +10,7 @@ from settings import (
 )
 
 def get_interface_llm(temperature: float = 0) -> ChatGoogleGenerativeAI:
+    """Fast, cheap model — used for chitchat detection and final answer formatting."""
     return ChatGoogleGenerativeAI(
         model=INTERFACE_GEMINI_MODEL,
         api_key=GEMINI_API_KEY,
@@ -17,6 +18,7 @@ def get_interface_llm(temperature: float = 0) -> ChatGoogleGenerativeAI:
     )
     
 def get_reasoning_llm(temperature: float = 0) -> ChatGoogleGenerativeAI:
+    """Capable model — drives the ReAct loop and generates Cypher queries."""
     return ChatGoogleGenerativeAI(
         model=REASONING_GEMINI_MODEL,
         api_key=GEMINI_API_KEY,

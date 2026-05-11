@@ -1,35 +1,22 @@
 """
-Shared state — passed through every LangGraph node.
+agent/state.py
+Minimal state for the ReAct agent.
+The LangGraph prebuilt ReAct agent manages its own message list internally —
+we only need to track what lives outside that loop.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional
 
-class AgentState(BaseModel):
-    # Input
+
+class AgentInput(BaseModel):
+    """What the caller passes in on every turn."""
     question: str
-    chat_history: List[Dict] = Field(default_factory=list)
-    is_followup: bool = False
-    
-    # Intent
-    intent: Optional[str] = None
-    entities: List[str] = Field(default_factory=list)
-    
-    # Cypher generation
-    cypher_query: Optional[str] = None
-    generation_prompt: Optional[str] = None
-    
-    # Validation
-    validation_ok: bool = True
-    validation_error: Optional[str] = None
-    
-    # Execution
-    raw_results: List[Dict] = Field(default_factory=list)
-    execution_error: Optional[str] = None
-    
-    # Retry loop
-    retry_count: int = 0
-    retry_feedback: Optional[str] = None
-    
-    #Final answer
-    answer: Optional[str] = None
+    session_id: str = "default"
+
+
+class AgentOutput(BaseModel):
+    """What the agent returns after each turn."""
+    answer: str
+    cypher_queries: list[str] = Field(default_factory=list)
+    iterations_used: int = 0

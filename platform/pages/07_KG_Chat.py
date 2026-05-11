@@ -1,10 +1,12 @@
 """
 platform/pages/07_KG_Chat.py
 Natural-language chat interface for the supply-chain Knowledge Graph.
+Adapted for the ReAct agent: uses agent.run(), supports multi-query Cypher audit.
 """
 
 import streamlit as st
-from agent import kg_agent, ConversationMemory
+import uuid
+from agent import run as agent_run, get_memory
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG
@@ -79,25 +81,39 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
 .divider-line {
     border: none; border-top: 1px solid #2A2D3A; margin: 1.25rem 0;
 }
+
+/* Subtle iteration badge */
+.iter-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    color: #6B7280;
+    border: 1px solid #2A2D3A;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # SESSION STATE
 # ─────────────────────────────────────────────
-if "memory" not in st.session_state:
-    st.session_state.memory = ConversationMemory()
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
+SESSION_ID = st.session_state.session_id
 
 if "show_cypher" not in st.session_state:
     st.session_state.show_cypher = False
 
-if "is_generating" not in st.session_state:
-    st.session_state.is_generating = False
-
 if "pending_input" not in st.session_state:
     st.session_state.pending_input = None
 
-memory: ConversationMemory = st.session_state.memory
+# Chat display history — list of dicts with role, content, cypher_queries, iterations
+if "display_history" not in st.session_state:
+    st.session_state.display_history = []
 
 # ─────────────────────────────────────────────
 # HEADER
@@ -113,22 +129,25 @@ st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 # ─────────────────────────────────────────────
 # SIDEBAR
 # ─────────────────────────────────────────────
+is_generating = st.session_state.pending_input is not None
+
 with st.sidebar:
     st.markdown("### ⚙️ Chat settings")
 
     st.toggle(
         "Show generated Cypher",
         key="show_cypher",
-        disabled=st.session_state.is_generating,
+        disabled=is_generating,
     )
 
     if st.button(
         "🗑️ Clear conversation",
         use_container_width=True,
-        disabled=st.session_state.is_generating,
+        disabled=is_generating,
     ):
-        memory.clear()
+        st.session_state.display_history = []
         st.session_state.pending_input = None
+        get_memory(SESSION_ID).clear()
         st.rerun()
 
     st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
@@ -155,22 +174,33 @@ def render_user_msg(content: str) -> None:
         unsafe_allow_html=True,
     )
 
-def render_assistant_msg(content: str, cypher: str | None = None) -> None:
+
+def render_assistant_msg(
+    content: str,
+    cypher_queries: list[str] | None = None,
+    iterations: int = 0,
+) -> None:
+    iter_badge = (
+        f'<span class="iter-badge">{iterations} tool call{"s" if iterations != 1 else ""}</span>'
+        if iterations > 0 else ""
+    )
     st.markdown(
         f'<div class="msg-assistant">'
-        f'<div class="msg-label msg-label-assistant">Agent</div>'
+        f'<div class="msg-label msg-label-assistant">Agent{iter_badge}</div>'
         f'{content}'
         f'</div>',
         unsafe_allow_html=True,
     )
-    if st.session_state.show_cypher and cypher:
-        with st.expander("Cypher Query"):
-            st.code(cypher, language="cypher")
+    if st.session_state.show_cypher and cypher_queries:
+        for i, cypher in enumerate(cypher_queries):
+            label = f"Cypher Query {i + 1}" if len(cypher_queries) > 1 else "Cypher Query"
+            with st.expander(label):
+                st.code(cypher, language="cypher")
 
 # ─────────────────────────────────────────────
 # CHAT HISTORY DISPLAY
 # ─────────────────────────────────────────────
-if not memory.messages and not st.session_state.pending_input:
+if not st.session_state.display_history and not is_generating:
     st.markdown(
         '<div style="color:#4B5563; font-style:italic; padding:1rem 0;">'
         "No messages yet. Ask something about your supply-chain graph ↓"
@@ -178,73 +208,62 @@ if not memory.messages and not st.session_state.pending_input:
         unsafe_allow_html=True,
     )
 
-for msg in memory.messages:
+for msg in st.session_state.display_history:
     if msg["role"] == "user":
         render_user_msg(msg["content"])
     else:
-        render_assistant_msg(msg["content"], cypher=msg.get("cypher"))
+        render_assistant_msg(
+            msg["content"],
+            cypher_queries=msg.get("cypher_queries"),
+            iterations=msg.get("iterations", 0),
+        )
 
+# ─────────────────────────────────────────────
+# PROCESS PENDING INPUT
+# ─────────────────────────────────────────────
 if st.session_state.pending_input:
-    render_user_msg(st.session_state.pending_input)
-    memory.add_user(st.session_state.pending_input)
+    question = st.session_state.pending_input
+
+    # Show the user message immediately
+    render_user_msg(question)
 
     with st.spinner("Thinking..."):
-        question = st.session_state.pending_input
-        initial_state = {
-            "question":          question,
-            "chat_history":      memory.get_history(),
-            "intent":            None,
-            "entities":          [],
-            "cypher_query":      None,
-            "generation_prompt": None,
-            "validation_ok":     False,
-            "validation_error":  None,
-            "raw_results":       [],
-            "execution_error":   None,
-            "retry_count":       0,
-            "retry_feedback":    None,
-            "answer":            None,
-            "is_followup":       False,
-        }
         try:
-            final_state = kg_agent.invoke(initial_state)
-            answer      = final_state.get("answer") or "No answer generated."
-            cypher      = final_state.get("cypher_query")
+            result = agent_run(question, session_id=SESSION_ID)
+            answer         = result.answer
+            cypher_queries = result.cypher_queries   # list[str], one per tool call
+            iterations     = result.iterations_used
         except Exception as e:
-            answer = f"Agent error: {e}"
-            cypher = None
+            answer         = f"Agent error: {e}"
+            cypher_queries = []
+            iterations     = 0
 
-    memory.add_assistant(answer, cypher=cypher)
+    # Persist to display history
+    st.session_state.display_history.append({"role": "user", "content": question})
+    st.session_state.display_history.append({
+        "role":          "assistant",
+        "content":       answer,
+        "cypher_queries": cypher_queries,
+        "iterations":    iterations,
+    })
+
     st.session_state.pending_input = None
-    st.session_state.is_generating = False
     st.rerun()
 
 # ─────────────────────────────────────────────
-# INPUT FORM
+# INPUT — st.chat_input (disabled natively while page reruns)
 # ─────────────────────────────────────────────
+# st.chat_input is automatically non-interactive while Streamlit is
+# processing a rerun, which gives us the "blocked while thinking" behaviour
+# without any manual disabled= flag.
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-if st.session_state.is_generating:
-    st.text_input(
-        "Your question",
-        placeholder="Agent is thinking...",
-        label_visibility="collapsed",
-        disabled=True,
-        key="input_disabled",
-    )
-else:
-    with st.form("chat_form", clear_on_submit=True):
-        col_input, col_btn = st.columns([9, 1])
-        with col_input:
-            user_input = st.text_input(
-                "Your question",
-                placeholder="e.g. Which routes have the highest disruption rate?",
-                label_visibility="collapsed",
-            )
-        with col_btn:
-            submitted = st.form_submit_button("Send", use_container_width=True)
+user_input = st.chat_input(
+    placeholder="e.g. Which routes have the highest disruption rate?",
+    disabled=is_generating,   # extra safety: also disable if pending
+    key="chat_input",
+)
 
-    if submitted and user_input.strip():
-        st.session_state.pending_input = user_input.strip()
-        st.session_state.is_generating = True
-        st.rerun()
+if user_input and user_input.strip() and not is_generating:
+    st.session_state.pending_input = user_input.strip()
+    st.rerun()

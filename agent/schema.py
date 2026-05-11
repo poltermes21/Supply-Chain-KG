@@ -77,8 +77,8 @@ KG_SCHEMA_PROMPT = """
                                          "D" (destination: inbound > 0 AND outbound = 0)
                                          "isolated" (no inbound nor outbound connections)
 
-  - outbound_degree           Long     — number of outgoing shipments from the city
-  - inbound_degree            Long     — number of incoming shipments to the city
+  - outbound_degree           Long     — number of outgoing orders from the city
+  - inbound_degree            Long     — number of incoming orders to the city
   - community_id              Long     — GDS Louvain community detection result (graph cluster id)
   - weighted_degree_score     Double   — GDS degree centrality weighted by orders volume (sum of ALL incident CITY_FLOW.orders, both inbound and outbound, since the graph projection is UNDIRECTED)
   - betweenness_score         Double   — GDS betweenness centrality score (fraction of shortest paths passing through this city, computed on undirected CITY_FLOW graph)
@@ -87,7 +87,7 @@ KG_SCHEMA_PROMPT = """
 
 **Country** (11 nodes) — unique constraint on `id`
   - id                        String   — ISO country code (e.g. "US", "CN", "DE")
-  - country_name              String   — full country name (e.g. "United States")
+  - name              String   — full country name (e.g. "United States")
   - region                    String   — macro region grouping:"Asia" | "Europe" | "Americas"
 
 **Route** (5 nodes) — unique constraint on `id`
@@ -176,18 +176,18 @@ KG_SCHEMA_PROMPT = """
 
 // City → City  (aggregated flow layer used for topology/vulnerability analysis)
 (:City)-[:CITY_FLOW]->(:City)
-  - shipments               Long         — number of orders between origin and destination cities
+  - orders               Long            — number of orders between origin and destination cities
   - avg_lead_time_days      Double       — mean Actual_Lead_Time_Days per OD pair
   - avg_delay_days          Double       — mean Delay_Days per OD pair
   - avg_cost_usd            Double       — mean Shipping_Cost_USD per OD pair
   - total_weight_kg         Long         — sum of Order_Weight_Kg per OD pair
-  - delay_rate_pct          Double       — percentage of delayed shipments (P(is_delayed = true) * 100))
-  - disrupted_rate_pct      Double       — percentage of disrupted shipments (P(is_disrupted = true) * 100))
+  - delay_rate_pct          Double       — percentage of delayed orders (P(is_delayed = true) * 100))
+  - disrupted_rate_pct      Double       — percentage of disrupted orders (P(is_disrupted = true) * 100))
   - route_count             Long         — number of unique Route values on this OD pair
   - routes_used             StringArray  — list of route ids used on this OD pair (['CoGH', 'Suez'])
   - route_concentration     Double       — HHI index (0–1), 1 = single route
   - avg_combined_risk_score Double       — mean combined_risk_score per OD pair
-  - air_share_pct           Double       — percentage of shipments using Air mode
+  - air_share_pct           Double       — percentage of orders using Air mode
   - dominant_mode           String       — most frequent Transportation_Mode in OD pair, "Sea" | "Air"
   - route_share             String       — JSON map of route → share % ("{"Suez": 0.6828, "CoGH": 0.3172}")
   - from                    String       — City.id
@@ -214,8 +214,8 @@ LIMIT 10
 
 // Top origin cities by shipment volume
 MATCH (o:Order)-[:ORIGIN_FROM]->(c:City)
-RETURN c.id AS city, count(o) AS shipments
-ORDER BY shipments DESC
+RETURN c.id AS city, count(o) AS orders
+ORDER BY orders DESC
 LIMIT 10
 
 // High-risk orders with disruption type and mitigation
@@ -233,7 +233,7 @@ LIMIT 20
 // City-to-city flows with highest delay rate
 MATCH (origin:City)-[f:CITY_FLOW]->(dest:City)
 RETURN origin.id AS from_city, dest.id AS to_city,
-       f.shipments AS shipments,
+       f.orders AS orders,
        f.delay_rate_pct AS delay_rate,
        f.dominant_mode AS mode
 ORDER BY f.delay_rate_pct DESC
