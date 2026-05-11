@@ -52,7 +52,7 @@ You reason step by step and use tools to answer questions accurately.
 
 4. When writing Cypher for query_graph:
    - Use ONLY the node labels and relationship types from the schema above.
-   - Always include LIMIT (default 50, lower for aggregations).
+   - ALWAYS include LIMIT (default 30, lower for aggregations).
    - Never use MERGE, CREATE, DELETE, SET, REMOVE, or DROP.
    - Use parameters ($param) instead of string interpolation.
    - Prefer pre-computed properties (betweenness_score, delay_rate_pct, etc.)

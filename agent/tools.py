@@ -46,8 +46,8 @@ _ALLOWED_RELS = {
     "CONNECTS", "VULNERABLE_TO", "LOCATED_IN", "CITY_FLOW",
 }
 
-_LABEL_RE = re.compile(r":\s*([A-Z][A-Za-z]+)(?=[\s\{\}\)\],])")
-_REL_RE   = re.compile(r"\[(?:\w+)?:([A-Z_]+)\]")
+_LABEL_RE = re.compile(r"\([^)]+:([A-Za-z][A-Za-z0-9_]*)")
+_REL_RE = re.compile(r"\[[^\]]*:([A-Z_][A-Z0-9_]*)")
 
 _MAX_RECORDS = 30   # observation size cap — keeps ReAct context bounded
 
@@ -75,7 +75,7 @@ def _validate(cypher: str) -> None:
 
     # 4. Must have LIMIT
     if "LIMIT" not in cypher.upper():
-        raise ValueError("Query must include a LIMIT clause (max 50 recommended).")
+        raise ValueError("Query must include a LIMIT clause (max 30 recommended).")
 
     # 5. Unknown node labels
     unknown_labels = set(_LABEL_RE.findall(cypher)) - _ALLOWED_LABELS
