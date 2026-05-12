@@ -1,7 +1,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
-from connection import get_neo4j_driver
+from shared.connection import get_neo4j_driver
 from analysis.queriesv2.block6_what_if import Block6Queries
 
 # ─────────────────────────────────────────────

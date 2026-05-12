@@ -108,8 +108,8 @@ KG_SCHEMA_PROMPT = """
 **MitigationAction** (3 nodes) — unique constraint on `id`
   - id                        Long     — unique category identifier (0, 1, 2)
   - name                      String   — "Expedited Air Freight" | "Re-routing" | "Standard Shipping"
-  - avg_cost_impact           Double   — mean shipping_cost_usd grouped by mitigation action
-  - avg_delay_reduction       Double   — mean delay_days grouped by mitigation action
+  - avg_cost_vs_baseline_pct  Double   — mean cost_vs_baseline_pct grouped by mitigation action
+  - avg_delay_days            Double   — mean delay_days grouped by mitigation action
 
 ---
 

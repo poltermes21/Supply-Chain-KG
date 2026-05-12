@@ -267,25 +267,25 @@ class KGExtractor:
         """
         Extract MitigationAction master nodes with aggregated effectiveness metrics.
 
-        id                  = mitigation_action_id (numeric: 0, 1, 2...)
-        action_name         = Mitigation_Action_Taken (e.g. 'Standard Shipping')
-        avg_cost_impact     = average shipping cost vs baseline for this mitigation
-        avg_delay_delays    = average delay days for this mitigation
+        id                          = mitigation_action_id (numeric: 0, 1, 2...)
+        action_name                 = Mitigation_Action_Taken (e.g. 'Standard Shipping')
+        avg_cost_vs_baseline_pct    = average shipping cost vs baseline for this mitigation
+        avg_delay_delays            = average delay days for this mitigation
         """
         print("Extracting MitigationAction nodes...")
 
         grouped = self.df.groupby(['mitigation_action_id', 'Mitigation_Action_Taken']).agg(
-            avg_cost_impact=('cost_vs_baseline_pct', 'mean'),
+            avg_cost_vs_baseline_pct=('cost_vs_baseline_pct', 'mean'),
             avg_delay_days=('Delay_Days', 'mean')
         ).reset_index()
 
         nodes = []
         for _, row in grouped.iterrows():
             nodes.append({
-                'id':                  int(row['mitigation_action_id']),
-                'name':                row['Mitigation_Action_Taken'],
-                'avg_cost_impact':     round(float(row['avg_cost_impact']), 2),
-                'avg_delay_days':      round(float(row['avg_delay_days']), 2),
+                'id':                       int(row['mitigation_action_id']),
+                'name':                     row['Mitigation_Action_Taken'],
+                'avg_cost_vs_baseline_pct': round(float(row['avg_cost_vs_baseline_pct']), 2),
+                'avg_delay_days':           round(float(row['avg_delay_days']), 2),
             })
 
         self.nodes['MitigationAction'] = nodes

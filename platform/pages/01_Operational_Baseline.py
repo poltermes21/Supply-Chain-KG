@@ -3,7 +3,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
-from connection import get_neo4j_driver
+from shared.connection import get_neo4j_driver
 from analysis.queriesv2 import Block1Queries
 
 # ─────────────────────────────────────────────
