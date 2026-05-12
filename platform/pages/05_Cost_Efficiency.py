@@ -3,18 +3,12 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
-from connection import get_neo4j_driver
+from shared.connection import get_neo4j_driver
 from analysis.queriesv2.block5_costs import Block5Queries
 import plotly.express as px
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
 st.set_page_config(page_title="Cost & Mitigation Efficiency", layout="wide")
 
-# ─────────────────────────────────────────────
-# SHARED STYLE
-# ─────────────────────────────────────────────
 FONT_SANS   = "IBM Plex Sans, sans-serif"
 FONT_MONO   = "IBM Plex Mono, monospace"
 GRID_COLOR  = "#2A2D3A"
@@ -67,9 +61,6 @@ def styled_yaxis(**kwargs):
     d.update(kwargs)
     return d
 
-# ─────────────────────────────────────────────
-# CSS
-# ─────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
@@ -186,20 +177,17 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
+
 # HEADER
-# ─────────────────────────────────────────────
 st.markdown('<div class="section-label">Block 5</div>', unsafe_allow_html=True)
-st.markdown("# 💰 Cost Analysis & Mitigation Efficiency")
+st.markdown("# Cost Analysis & Mitigation Efficiency")
 st.markdown(
     "Economic impact of disruptions and effectiveness of mitigation responses — "
     "cost increases, residual delays and context-dependent recovery rates."
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
 # DATA LOADING
-# ─────────────────────────────────────────────
 driver = get_neo4j_driver()
 
 @st.cache_data(ttl=3600)
@@ -216,7 +204,7 @@ df_mit_disr  = data["mitigation_by_disruption"]
 df_mit_ctx   = data["mitigation_by_context"]
 df_air       = data["expedited_air_usage"]
 
-# global palette
+# PREPROCESS
 PALETTE = [
     "#1D4ED8",  # blue
     "#10B981",  # green
@@ -226,16 +214,14 @@ PALETTE = [
 ]
 
 disruption_types = sorted(df_by_type["disruption_type"].unique())
-
 COLOR_MAP = {
     t: PALETTE[i % len(PALETTE)]
     for i, t in enumerate(disruption_types)
 }
 
 
-# ═══════════════════════════════════════════════
-# SECTION 1 — Baseline economic impact
-# ═══════════════════════════════════════════════
+# SECTION 1 - Baseline economic impact
+
 st.markdown('<div class="section-title">1 · Economic impact of disruptions</div>', unsafe_allow_html=True)
 
 if not df_baseline.empty:
@@ -298,9 +284,9 @@ if not df_baseline.empty:
                 </div>""", unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════════════
-# SECTION 2 — Disruption cost profile
-# ═══════════════════════════════════════════════
+
+# SECTION 2 - Disruption cost profile
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">2 · Disruption cost profile</div>', unsafe_allow_html=True)
 
@@ -442,9 +428,8 @@ with col_radar:
         st.plotly_chart(fig_radar, use_container_width=True)
 
 
-# ═══════════════════════════════════════════════
-# SECTION 3 — Global mitigation effectiveness
-# ═══════════════════════════════════════════════
+# SECTION 3 - Global mitigation effectiveness
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">3 · Global mitigation effectiveness</div>', unsafe_allow_html=True)
 
@@ -546,9 +531,8 @@ if not df_mit_sum.empty:
     st.plotly_chart(fig_stack, use_container_width=True)
 
 
-# ═══════════════════════════════════════════════
-# SECTION 4 — Mitigation by disruption context
-# ═══════════════════════════════════════════════
+# SECTION 4 - Mitigation by disruption context
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">4 · Mitigation by disruption context</div>', unsafe_allow_html=True)
 
@@ -620,9 +604,8 @@ if not df_mit_disr.empty:
         )
 
 
-# ═══════════════════════════════════════════════
-# SECTION 5 — Full context mitigation
-# ═══════════════════════════════════════════════
+# SECTION 5 - Full context mitigation
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">5 · Full context mitigation</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Disruption × Route × Risk level → Heatmap by action mitigation</div>', unsafe_allow_html=True)
@@ -685,7 +668,7 @@ if not df_mit_ctx.empty:
             values="total_cases",
         )
 
-        # ── text matrix: value + low-N warning ──────────────
+        # text matrix: value + low-N warning
         text_matrix = []
         for r_idx, action in enumerate(heatmap_df.index):
             row_text = []
@@ -719,7 +702,6 @@ if not df_mit_ctx.empty:
                 tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1),
                 thickness=12,
             ),
-            # ── FIX: afegim text i texttemplate ──
             text=text_matrix,
             texttemplate="%{text}",
             textfont=dict(size=11, family=FONT_MONO, color="#1A1D27"),
@@ -753,7 +735,7 @@ if not df_mit_ctx.empty:
         if any_low_n:
             st.caption(f"⚠ Les cel·les marcades amb ⚠ tenen menys de {LOW_N_THRESHOLD} casos — valors poden no ser estadísticament representatius.")
 
-        with st.expander("📋 Detailed table by context"):
+        with st.expander("Detailed table by context"):
             st.caption("Tip: you can sort directly in the table by clicking on column headers.")
             df_ctx_display = df_ctx[[
                 "disruption_type", "route", "risk_level", "mitigation_action",
@@ -774,9 +756,9 @@ if not df_mit_ctx.empty:
                         "On Schedule (%)", min_value=0, max_value=100, format="%.1f%%"),
                 }
             )
-# ═══════════════════════════════════════════════
-# SECTION 6 — Expedited air usage
-# ═══════════════════════════════════════════════
+
+# SECTION 6 - Expedited air usage
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">6 · Expedited air usage</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-label">% Expedited Air Freight usage by disruption</div>', unsafe_allow_html=True)

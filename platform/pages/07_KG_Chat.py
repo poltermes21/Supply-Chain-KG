@@ -8,14 +8,8 @@ import streamlit as st
 import uuid
 from agent import run as agent_run, get_memory
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
 st.set_page_config(page_title="KG Chat", layout="wide")
 
-# ─────────────────────────────────────────────
-# SHARED STYLE
-# ─────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
@@ -97,9 +91,7 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
 # SESSION STATE
-# ─────────────────────────────────────────────
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 
@@ -111,28 +103,24 @@ if "show_cypher" not in st.session_state:
 if "pending_input" not in st.session_state:
     st.session_state.pending_input = None
 
-# Chat display history — list of dicts with role, content, cypher_queries, iterations
 if "display_history" not in st.session_state:
     st.session_state.display_history = []
 
-# ─────────────────────────────────────────────
+
 # HEADER
-# ─────────────────────────────────────────────
 st.markdown('<div class="section-label">Block 7</div>', unsafe_allow_html=True)
-st.markdown("# 💬 Knowledge Graph Chat")
+st.markdown("# Knowledge Graph Chat")
 st.markdown(
     "Ask questions in natural language — the agent translates them to Cypher, "
     "queries the Neo4j graph, and returns a grounded answer."
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
 # SIDEBAR
-# ─────────────────────────────────────────────
 is_generating = st.session_state.pending_input is not None
 
 with st.sidebar:
-    st.markdown("### ⚙️ Chat settings")
+    st.markdown("### Chat settings")
 
     st.toggle(
         "Show generated Cypher",
@@ -162,9 +150,7 @@ with st.sidebar:
     ]:
         st.caption(f"• {s}")
 
-# ─────────────────────────────────────────────
 # HELPERS
-# ─────────────────────────────────────────────
 def render_user_msg(content: str) -> None:
     st.markdown(
         f'<div class="msg-user">'
@@ -197,9 +183,7 @@ def render_assistant_msg(
             with st.expander(label):
                 st.code(cypher, language="cypher")
 
-# ─────────────────────────────────────────────
 # CHAT HISTORY DISPLAY
-# ─────────────────────────────────────────────
 if not st.session_state.display_history and not is_generating:
     st.markdown(
         '<div style="color:#4B5563; font-style:italic; padding:1rem 0;">'
@@ -218,9 +202,8 @@ for msg in st.session_state.display_history:
             iterations=msg.get("iterations", 0),
         )
 
-# ─────────────────────────────────────────────
+
 # PROCESS PENDING INPUT
-# ─────────────────────────────────────────────
 if st.session_state.pending_input:
     question = st.session_state.pending_input
 
@@ -250,17 +233,12 @@ if st.session_state.pending_input:
     st.session_state.pending_input = None
     st.rerun()
 
-# ─────────────────────────────────────────────
-# INPUT — st.chat_input (disabled natively while page reruns)
-# ─────────────────────────────────────────────
-# st.chat_input is automatically non-interactive while Streamlit is
-# processing a rerun, which gives us the "blocked while thinking" behaviour
-# without any manual disabled= flag.
+# INPUT
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
 user_input = st.chat_input(
     placeholder="e.g. Which routes have the highest disruption rate?",
-    disabled=is_generating,   # extra safety: also disable if pending
+    disabled=is_generating,
     key="chat_input",
 )
 

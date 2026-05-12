@@ -1,8 +1,8 @@
 """
-agent/state.py
-Minimal state for the ReAct agent.
-The LangGraph prebuilt ReAct agent manages its own message list internally —
-we only need to track what lives outside that loop.
+Agent State Module
+
+Defines the input and output state structures for the ReAct agent.
+LangGraph manages internal message history, so only external interaction state is tracked.
 """
 
 from pydantic import BaseModel, Field

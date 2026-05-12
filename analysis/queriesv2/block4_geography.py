@@ -1,6 +1,4 @@
 """
-block4_geographic.py
-
 Block 4 — Geographic Analysis and Community Detection
 "How does the logistics network cluster geographically and structurally?"
 """

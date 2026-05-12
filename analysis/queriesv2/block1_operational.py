@@ -1,6 +1,4 @@
 """
-block1_operational.py
-
 Block 1 — Operational Baseline Characterization
 "How does the supply chain perform under normal and observed conditions?"
 

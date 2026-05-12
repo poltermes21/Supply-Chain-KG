@@ -1,17 +1,11 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
-from connection import get_neo4j_driver
+from shared.connection import get_neo4j_driver
 from analysis.queriesv2.block6_what_if import Block6Queries
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
 st.set_page_config(page_title="What-If Scenarios", layout="wide")
 
-# ─────────────────────────────────────────────
-# SHARED STYLE
-# ─────────────────────────────────────────────
 FONT_SANS   = "IBM Plex Sans, sans-serif"
 FONT_MONO   = "IBM Plex Mono, monospace"
 GRID_COLOR  = "#2A2D3A"
@@ -83,9 +77,6 @@ def styled_yaxis(**kwargs):
     d.update(kwargs)
     return d
 
-# ─────────────────────────────────────────────
-# CSS
-# ─────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
@@ -187,11 +178,10 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
+
 # HEADER
-# ─────────────────────────────────────────────
 st.markdown('<div class="section-label">Block 6</div>', unsafe_allow_html=True)
-st.markdown("# 🧪 What-If Scenario Simulation")
+st.markdown("# What-If Scenario Simulation")
 st.markdown(
     "Simulate network shocks — route blockages, hub failures and path optimization — "
     "to quantify resilience and identify rerouting alternatives."
@@ -200,23 +190,21 @@ st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
 driver = get_neo4j_driver()
 
-# ─────────────────────────────────────────────
 # TABS
-# ─────────────────────────────────────────────
 tab_route, tab_node, tab_path = st.tabs([
-    "🛣️  Route Shock",
-    "🏙️  Node Failure",
-    "🔍  Path Optimization",
+    "Route Shock",
+    "Node Failure",
+    "Path Optimization",
 ])
 
 
-# ═══════════════════════════════════════════════
-# SECTION 1 — ROUTE SHOCK
-# ═══════════════════════════════════════════════
+
+# SECTION 1 - Route Shock
+
 with tab_route:
     st.markdown('<div class="section-title">Route Shock Simulation</div>', unsafe_allow_html=True)
 
-    # — Presets —
+    # Presets
     st.markdown('<div class="preset-label">Quick Presets</div>', unsafe_allow_html=True)
     pre_c1, pre_c2, pre_c3, pre_c4 = st.columns(4)
     preset_route = None
@@ -269,7 +257,7 @@ with tab_route:
         else:
             ov = df_overview.iloc[0]
 
-            # — Callout —
+            # Callout
             pct = float(ov["pct_total_network"])
             if pct >= 30:
                 st.markdown(f"""
@@ -287,7 +275,7 @@ with tab_route:
                     <strong>{int(ov['affected_orders']):,} orders</strong>.
                 </div>""", unsafe_allow_html=True)
 
-            # — KPI cards —
+            # KPI cards
             k1, k2 = st.columns(2)
             kpi_data = [
                 (k1, "Affected Orders",   f"{int(ov['affected_orders']):,}", "#EF4444",
@@ -306,7 +294,7 @@ with tab_route:
 
             st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-            # — Reroutability Sankey + stranded table —
+            # Reroutability Sankey + stranded table
             if not df_reroute.empty:
                 col_san, col_strand = st.columns([3, 2])
 
@@ -319,7 +307,7 @@ with tab_route:
                     st.markdown('<div class="section-label">Reroutability — Sankey by shock status</div>',
                                 unsafe_allow_html=True)
                     
-                    # — Legend —
+                    # Legend
                     leg_cols = st.columns(len(SHOCK_STATUS))
                     for i, (key, meta) in enumerate(SHOCK_STATUS.items()):
                         with leg_cols[i]:
@@ -442,13 +430,13 @@ with tab_route:
                         }
                     )
 
-            # — Penalty estimate —
+            # Penalty estimate
             if not df_penalty.empty:
                 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
                 st.markdown('<div class="section-label">Penalty estimate — cost & delay per observed rerouting</div>',
                             unsafe_allow_html=True)
 
-                # — Filters —
+                # Filters
                 f1, f2, f3 = st.columns(3)
                 with f1:
                     origin_options = ["All"] + sorted(df_penalty["origin"].unique().tolist())
@@ -518,9 +506,9 @@ with tab_route:
         st.info("Please select one or more routes to simulate a blockade.")
 
 
-# ═══════════════════════════════════════════════
-# SECTION 2 — NODE FAILURE
-# ═══════════════════════════════════════════════
+
+# SECTION 2 - Node Failure
+
 with tab_node:
     st.markdown('<div class="section-title">Node Failure Simulation</div>', unsafe_allow_html=True)
 
@@ -579,7 +567,7 @@ with tab_node:
                 across multiple lanes and logistics communities.
             </div>""", unsafe_allow_html=True)
 
-        # Local impact KPI cards
+        # KPI cards
         if not df_local.empty:
             st.markdown('<div class="section-label">Local impact per city — directly incident flows</div>',
                         unsafe_allow_html=True)
@@ -667,9 +655,9 @@ with tab_node:
         st.info("Please select one or more cities to simulate a blockade.")
 
 
-# ═══════════════════════════════════════════════
-# SECTION 3 — PATH OPTIMIZATION
-# ═══════════════════════════════════════════════
+
+# SECTION 3 - Path Optimization
+
 with tab_path:
     st.markdown('<div class="section-title">Emergency Path Optimization</div>', unsafe_allow_html=True)
     st.markdown(

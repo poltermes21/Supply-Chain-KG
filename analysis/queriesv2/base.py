@@ -1,7 +1,5 @@
 """
-base.py
-=======
-Utilitats compartides per tots els blocs de consultes.
+Shared utilities for executing Neo4j queries across multiple analysis modules.
 """
 
 import pandas as pd

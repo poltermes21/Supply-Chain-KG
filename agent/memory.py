@@ -1,14 +1,8 @@
 """
-agent/memory.py
-In-process conversation memory, keyed by session_id.
-For a single-user Streamlit app one session is enough;
-for multi-session keep the dict across requests.
+Agent Memory Module
 
-Design decisions:
-- MAX_TURNS = 5  → 10 messages max injected into the LLM context.
-  At ~500 tokens/turn this is ~5k tokens of history — manageable.
-- We store the raw LangChain message format (HumanMessage / AIMessage)
-  so they can be passed directly to the ReAct agent's message history.
+In-process conversation memory keyed by session_id for maintaining
+short-term dialogue context in the ReAct agent.
 """
 
 from collections import deque

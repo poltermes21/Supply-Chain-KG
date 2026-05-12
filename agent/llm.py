@@ -1,5 +1,8 @@
 """
-Central LLM factory
+LLM Factory Module
+
+Centralized factory for initializing LLM instances used by the agent,
+separating fast interface models from reasoning models.
 """
 
 from langchain_google_genai import ChatGoogleGenerativeAI
