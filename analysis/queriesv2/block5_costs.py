@@ -31,7 +31,7 @@ class Block5Queries:
     MATCH (o:Order)
     RETURN
         o.is_disrupted AS is_disrupted,
-        count(o) AS total_shipments,
+        count(o) AS total_orders,
         round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
         round(avg(o.delay_days), 2) AS avg_delay_days,
         round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct
@@ -45,7 +45,7 @@ class Block5Queries:
         WHERE d.name <> 'no_disruption'
         RETURN
             d.full_name AS disruption_type,
-            count(o) AS total_shipments,
+            count(o) AS total_orders,
             round(avg(o.shipping_cost_usd), 2) AS avg_cost_usd,
             round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
             round(avg(o.delay_days), 2) AS avg_delay_days,
@@ -66,9 +66,9 @@ class Block5Queries:
             sum(CASE WHEN o.mitigation_effectiveness = 'fully_effective' THEN 1 ELSE 0 END) AS fully_effective,
             sum(CASE WHEN o.mitigation_effectiveness = 'partially_effective' THEN 1 ELSE 0 END) AS partially_effective,
             sum(CASE WHEN o.mitigation_effectiveness = 'not_effective' THEN 1 ELSE 0 END) AS not_effective,
-            round(avg(o.delay_days), 2) AS residual_delay_days,
+            round(ma.avg_delay_days, 2) AS residual_delay_days,
             round(100.0 * avg(CASE WHEN o.is_delayed THEN 1.0 ELSE 0.0 END), 2) AS delay_rate_pct,
-            round(avg(o.cost_vs_baseline_pct), 2) AS avg_cost_vs_baseline_pct,
+            round(ma.avg_cost_impact, 2) AS avg_cost_vs_baseline_pct,
             round(100.0 * avg(CASE WHEN o.mitigation_effective THEN 1.0 ELSE 0.0 END), 2) AS effectiveness_rate_pct,
             round(
                 100.0 *
@@ -150,7 +150,7 @@ class Block5Queries:
         WHERE d.name <> 'no_disruption'
         RETURN
             d.full_name AS disruption_type,
-            count(o) AS disrupted_shipments,
+            count(o) AS disrupted_orders,
             sum(CASE WHEN ma.name = 'Expedited Air Freight' THEN 1 ELSE 0 END) AS expedited_air_cases,
             round(
                 100.0 * sum(CASE WHEN ma.name = 'Expedited Air Freight' THEN 1 ELSE 0 END) / toFloat(count(o)),

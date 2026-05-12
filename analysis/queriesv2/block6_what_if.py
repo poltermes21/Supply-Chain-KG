@@ -42,7 +42,7 @@ class Block6Queries:
                 CITY_FLOW: {
                     orientation: 'NATURAL',
                     properties: [
-                        'shipments',
+                        'orders',
                         'avg_cost_usd',
                         'avg_lead_time_days',
                         'avg_combined_risk_score',
@@ -76,12 +76,12 @@ class Block6Queries:
 
         WITH
             total_orders,
-            sum(f.shipments) AS affected_shipments
+            sum(f.orders) AS affected_orders
 
         RETURN
             $blocked_routes AS blocked_routes,
-            affected_shipments,
-            round(100.0 * affected_shipments / toFloat(total_orders), 2) AS pct_total_network
+            affected_orders,
+            round(100.0 * affected_orders / toFloat(total_orders), 2) AS pct_total_network
     """   
 
     # 6.2 ROUTE-SHOCK REROUTABILITY
@@ -96,7 +96,7 @@ class Block6Queries:
         RETURN
             orig.id AS origin,
             dest.id AS destination,
-            f.shipments AS affected_shipments,
+            f.orders AS affected_orders,
             size(blocked_hits) AS blocked_route_count,
             size(surviving_routes) AS surviving_route_count,
             size(f.routes_used) AS total_routes,
@@ -106,7 +106,7 @@ class Block6Queries:
                 WHEN f.primary_route IN $blocked_routes THEN 'primary_loss'
                 ELSE 'partial_loss'
             END AS shock_status
-        ORDER BY surviving_route_count ASC, affected_shipments DESC
+        ORDER BY surviving_route_count ASC, affected_orders DESC
     """
 
     # 6.3 ROUTE-SHOCK PENALTY ESTIMATE
@@ -118,7 +118,7 @@ class Block6Queries:
         WHERE r.id IN $blocked_routes
         WITH
             orig, dest, r,
-            count(o) AS affected_shipments,
+            count(o) AS affected_orders,
             avg(o.shipping_cost_usd) AS base_cost,
             avg(o.actual_lead_time_days) AS base_lead
         OPTIONAL MATCH (alt:Order)-[:ORIGIN_FROM]->(orig),
@@ -126,14 +126,14 @@ class Block6Queries:
                     (alt)-[:SHIPPED_VIA]->(alt_r:Route)
         WHERE NOT alt_r.id IN $blocked_routes
         WITH
-            orig, dest, r, affected_shipments, base_cost, base_lead, alt_r,
+            orig, dest, r, affected_orders, base_cost, base_lead, alt_r,
             avg(alt.shipping_cost_usd) AS alt_cost,
             avg(alt.actual_lead_time_days) AS alt_lead
         RETURN
             orig.id AS origin,
             dest.id AS destination,
             r.id as blocked_route,
-            affected_shipments,
+            affected_orders,
             CASE 
                 WHEN alt_r IS NULL THEN 'no_observed_alternative'
                 ELSE 'reroutable_from_history'
@@ -141,7 +141,7 @@ class Block6Queries:
             alt_r.id AS alternative_route,
             CASE WHEN alt_cost IS NULL THEN NULL ELSE round(alt_cost - base_cost, 2) END AS est_cost_delta_usd,
             CASE WHEN alt_lead IS NULL THEN NULL ELSE round(alt_lead - base_lead, 2) END AS est_lead_delta_days
-        ORDER BY affected_shipments DESC
+        ORDER BY affected_orders DESC
     """
 
     # 6.4 NODE-FAILURE LOCAL IMPACT
@@ -159,25 +159,25 @@ class Block6Queries:
             OPTIONAL MATCH (c)-[out:CITY_FLOW]->()
             RETURN
                 c.id AS city,
-                coalesce(sum(out.shipments), 0) AS outbound_shipments,
+                coalesce(sum(out.orders), 0) AS outbound_orders,
                 count(out) AS outbound_lanes
         }
         CALL {
             WITH c
             OPTIONAL MATCH ()-[inc:CITY_FLOW]->(c)
             RETURN
-                coalesce(sum(inc.shipments), 0) AS inbound_shipments,
+                coalesce(sum(inc.orders), 0) AS inbound_orders,
                 count(inc) AS inbound_lanes
         }
 
         RETURN
             city AS blocked_city,
-            outbound_shipments,
-            inbound_shipments,
+            outbound_orders,
+            inbound_orders,
             outbound_lanes,
             inbound_lanes,
-            outbound_shipments + inbound_shipments AS total_affected_shipments
-        ORDER BY total_affected_shipments DESC
+            outbound_orders + inbound_orders AS total_affected_orders
+        ORDER BY total_affected_orders DESC
     """
     
     # 6.5 NODE-FAILURE GLOBAL IMPACT
@@ -190,11 +190,11 @@ class Block6Queries:
         RETURN
             orig.id AS origin,
             dest.id AS destination,
-            f.shipments AS affected_shipments,
+            f.orders AS affected_orders,
             f.avg_cost_usd AS avg_cost,
             f.avg_lead_time_days AS avg_lead_time,
             f.avg_combined_risk_score AS risk_score
-        ORDER BY affected_shipments DESC
+        ORDER BY affected_orders DESC
     """
 
     # 6.6 SHORTEST PATH BY WEIGHT

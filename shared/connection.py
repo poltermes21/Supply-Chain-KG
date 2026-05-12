@@ -2,17 +2,13 @@ import streamlit as st
 import sys
 import os
 
-# Add the project root directory to the sys.path
-# This allows Streamlit to find and import the 'analysis' folder
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 from analysis.queriesv2.base import get_driver
 
 @st.cache_resource
 def get_neo4j_driver():
     """
     Creates and caches a single Neo4j driver instance.
-    The driver is shared across all app pages to optimize performance.
+    The driver is shared across all app pages and the AI agent to optimize performance.
     """
     try:
         uri = st.secrets["NEO4J_URI"]

@@ -216,10 +216,7 @@ df_mit_disr  = data["mitigation_by_disruption"]
 df_mit_ctx   = data["mitigation_by_context"]
 df_air       = data["expedited_air_usage"]
 
-
-# ─────────────────────────────────────────────
-# GLOBAL VISUAL PALETTE (CONSISTENT ACROSS ALL CHARTS)
-# ─────────────────────────────────────────────
+# global palette
 PALETTE = [
     "#1D4ED8",  # blue
     "#10B981",  # green
@@ -237,9 +234,9 @@ COLOR_MAP = {
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 1 — Impacte econòmic baseline
+# SECTION 1 — Baseline economic impact
 # ═══════════════════════════════════════════════
-st.markdown('<div class="section-title">1 · Impacte econòmic de les disrupcions</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">1 · Economic impact of disruptions</div>', unsafe_allow_html=True)
 
 if not df_baseline.empty:
     disrupted     = df_baseline[df_baseline["is_disrupted"] == True]
@@ -249,7 +246,7 @@ if not df_baseline.empty:
         d  = disrupted.iloc[0]
         nd = non_disrupted.iloc[0]
 
-        # Càlcul de mètriques
+        # Metrics calculation
         m_list = [
             {
                 "label": "Cost vs Baseline",
@@ -302,16 +299,16 @@ if not df_baseline.empty:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 2 — Perfil de cost per tipus de disrupció
+# SECTION 2 — Disruption cost profile
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · Perfil de cost per tipus de disrupció</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">2 · Disruption cost profile</div>', unsafe_allow_html=True)
 
 if not df_by_type.empty:
     col_bar, col_radar = st.columns([5, 4])
 
     with col_bar:
-        st.markdown('<div class="section-label">Cost vs baseline (barra) i P95 delay days (línia)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Cost vs baseline (bar) i P95 delay days (line)</div>', unsafe_allow_html=True)
 
         fig_cost = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -328,10 +325,10 @@ if not df_by_type.empty:
                 hovertemplate=(
                     f"<b>{row['disruption_type']}</b><br>"
                     f"Cost vs Baseline: {row['avg_cost_vs_baseline_pct']:.2f}%<br>"
-                    f"Avg Delay: {row['avg_delay_days']:.2f}d<br>"
+                    f"Avg Delay days: {row['avg_delay_days']:.2f}d<br>"
                     f"Delay rate: {row['delay_rate_pct']:.2f}%<br>"
-                    f"P95 Delay: {row['p95_delay_days']:.2f}d<br>"
-                    f"Shipments: {int(row['total_shipments']):,}"
+                    f"P95 Delay Days: {row['p95_delay_days']:.2f}d<br>"
+                    f"Orders: {int(row['total_orders']):,}"
                     "<extra></extra>"
                 ),
                 showlegend=False,
@@ -340,7 +337,7 @@ if not df_by_type.empty:
         fig_cost.add_trace(go.Scatter(
             x=df_by_type["disruption_type"],
             y=df_by_type["p95_delay_days"],
-            name="P95 Delay (dies)",
+            name="P95 Delay Days",
             mode="lines+markers",
             line=dict(color="#E5E7EB", width=2, dash="dot"),
             marker=dict(size=8, color="#E5E7EB", line=dict(width=1.5, color="#0F1117")),
@@ -350,7 +347,7 @@ if not df_by_type.empty:
         fig_cost.add_trace(go.Scatter(
             x=df_by_type["disruption_type"],
             y=df_by_type["avg_delay_days"],
-            name="Avg Delay (dies)",
+            name="Avg Delay Days",
             mode="lines+markers",
             line=dict(color="#E5E7EB", width=2, dash="dash"),
             marker=dict(size=7, color="#E5E7EB", line=dict(width=1.5, color="#0F1117")),
@@ -374,26 +371,24 @@ if not df_by_type.empty:
         fig_cost.update_xaxes(**styled_xaxis())
         st.plotly_chart(fig_cost, use_container_width=True)
         st.caption(
-            "Barres = cost vs baseline mitjà. Línia puntejada = P95 delay. "
-            "Línia discontínua = Avg delay. Ambdues línies comparteixen l'eix dret (dies)."
+            "Bars represent average cost vs baseline. Dotted line shows P95 delay, "
+            "while dashed line shows average delay. Both metrics share the right-hand axis (days)."
         )
 with col_radar:
     st.markdown(
-        '<div class="section-label">Radar — perfil multidimensional per disrupció</div>',
+        '<div class="section-label">Radar — multidimensional disruption profile</div>',
         unsafe_allow_html=True
     )
 
     if not df_by_type.empty:
         fig_radar = go.Figure()
-
         df_r = df_by_type.copy()
-
-        # normalització percentil (mateix estil que routes radar)
+        
         radar_dims = [
             "avg_cost_vs_baseline_pct",
             "avg_delay_days",
             "p95_delay_days",
-            "total_shipments"
+            "total_orders"
         ]
 
         categories = ["Cost vs Baseline", "Avg Delay", "P95 Delay", "Volume"]
@@ -408,7 +403,7 @@ with col_radar:
                 row["avg_cost_vs_baseline_pct_norm"],
                 row["avg_delay_days_norm"],
                 row["p95_delay_days_norm"],
-                row["total_shipments_norm"]
+                row["total_orders_norm"]
             ]
             vals += [vals[0]]
 
@@ -448,14 +443,14 @@ with col_radar:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 3 — Efectivitat de mitigació global
+# SECTION 3 — Global mitigation effectiveness
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">3 · Efectivitat de mitigació global</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">3 · Global mitigation effectiveness</div>', unsafe_allow_html=True)
 
 if not df_mit_sum.empty:
     # Cards
-    st.markdown('<div class="section-label">Mètriques per acció de mitigació</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Metrics by mitigation action</div>', unsafe_allow_html=True)
     mit_cols = st.columns(len(df_mit_sum))
     max_eff  = df_mit_sum["effectiveness_rate_pct"].max()
     max_prem = df_mit_sum["avg_cost_vs_baseline_pct"].max()
@@ -521,7 +516,7 @@ if not df_mit_sum.empty:
     st.markdown("")
 
     # Stacked bar
-    st.markdown('<div class="section-label">Distribució d\'efectivitat per acció</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Effectiveness distribution by action</div>', unsafe_allow_html=True)
     fig_stack = go.Figure()
     for eff_key, eff_label, eff_color in [
         ("fully_effective",     "Fully Effective",     "#10B981"),
@@ -552,15 +547,15 @@ if not df_mit_sum.empty:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 4 — Mitigació per context de disrupció
+# SECTION 4 — Mitigation by disruption context
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">4 · Mitigació per context de disrupció</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">4 · Mitigation by disruption context</div>', unsafe_allow_html=True)
 
 if not df_mit_disr.empty:
     disruption_types = sorted(df_mit_disr["disruption_type"].unique())
     sel_disruption = st.selectbox(
-        "Tipus de disrupció",
+        "Disruption type",
         options=disruption_types,
         index=0,
     )
@@ -602,7 +597,7 @@ if not df_mit_disr.empty:
                 """, unsafe_allow_html=True)
 
         st.markdown("")
-        st.markdown('<div class="section-label">Comparativa ordenada per efectivitat</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Comparison sorted by effectiveness</div>', unsafe_allow_html=True)
 
         df_table = df_filt[[
             "mitigation_action", "effectiveness_rate_pct", "avg_cost_vs_baseline_pct",
@@ -626,36 +621,36 @@ if not df_mit_disr.empty:
 
 
 # ═══════════════════════════════════════════════
-# SECCIÓ 5 — Mitigació per context complet
+# SECTION 5 — Full context mitigation
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">5 · Mitigació per context complet</div>', unsafe_allow_html=True)
-st.markdown('<div class="section-label">Disruption × Route × Risk level → Heatmap per acció de mitigació</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">5 · Full context mitigation</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">Disruption × Route × Risk level → Heatmap by action mitigation</div>', unsafe_allow_html=True)
 
 LOW_N_THRESHOLD = 5
 
 if not df_mit_ctx.empty:
     f_col1, f_col2, f_col3 = st.columns(3)
     with f_col1:
-        ctx_disruptions = ["Totes"] + sorted(df_mit_ctx["disruption_type"].unique().tolist())
+        ctx_disruptions = ["All"] + sorted(df_mit_ctx["disruption_type"].unique().tolist())
         sel_ctx_disr = st.selectbox("Disruption type", ctx_disruptions, index=0)
     with f_col2:
-        ctx_routes = ["Totes"] + sorted(df_mit_ctx["route"].unique().tolist())
+        ctx_routes = ["All"] + sorted(df_mit_ctx["route"].unique().tolist())
         sel_ctx_route = st.selectbox("Route", ctx_routes, index=0)
     with f_col3:
         risk_order = ["low", "medium", "high", "critical"]
-        ctx_risks = ["Tots"] + [r for r in risk_order if r in df_mit_ctx["risk_level"].str.lower().unique()]
+        ctx_risks = ["All"] + [r for r in risk_order if r in df_mit_ctx["risk_level"].str.lower().unique()]
         sel_ctx_risk = st.selectbox("Risk level", ctx_risks, index=0)
 
     df_ctx = df_mit_ctx.copy()
     df_ctx["risk_level"] = df_ctx["risk_level"].str.lower()
-    if sel_ctx_disr  != "Totes": df_ctx = df_ctx[df_ctx["disruption_type"] == sel_ctx_disr]
-    if sel_ctx_route != "Totes": df_ctx = df_ctx[df_ctx["route"]            == sel_ctx_route]
-    if sel_ctx_risk  != "Tots":  df_ctx = df_ctx[df_ctx["risk_level"]       == sel_ctx_risk]
+    if sel_ctx_disr  != "All": df_ctx = df_ctx[df_ctx["disruption_type"] == sel_ctx_disr]
+    if sel_ctx_route != "All": df_ctx = df_ctx[df_ctx["route"]            == sel_ctx_route]
+    if sel_ctx_risk  != "All":  df_ctx = df_ctx[df_ctx["risk_level"]       == sel_ctx_risk]
 
     if df_ctx.empty:
         st.markdown(
-            '<div class="callout-box">⚠ Cap dada per a la combinació de filtres seleccionada.</div>',
+            '<div class="callout-box">⚠ No data available for the selected filter combination.</div>',
             unsafe_allow_html=True,
         )
     else:
@@ -758,8 +753,8 @@ if not df_mit_ctx.empty:
         if any_low_n:
             st.caption(f"⚠ Les cel·les marcades amb ⚠ tenen menys de {LOW_N_THRESHOLD} casos — valors poden no ser estadísticament representatius.")
 
-        with st.expander("📋 Taula detallada per context"):
-            st.caption("Tip: pots ordenar directament a la taula fent clic als headers de columna.")
+        with st.expander("📋 Detailed table by context"):
+            st.caption("Tip: you can sort directly in the table by clicking on column headers.")
             df_ctx_display = df_ctx[[
                 "disruption_type", "route", "risk_level", "mitigation_action",
                 "total_cases", "effectiveness_rate_pct", "avg_cost_vs_baseline_pct",
@@ -780,11 +775,11 @@ if not df_mit_ctx.empty:
                 }
             )
 # ═══════════════════════════════════════════════
-# SECCIÓ 6 — Ús d'aire expedit
+# SECTION 6 — Expedited air usage
 # ═══════════════════════════════════════════════
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">6 · Aire expedit com a indicador de pressió</div>', unsafe_allow_html=True)
-st.markdown('<div class="section-label">% d\'ús d\'Expedited Air Freight per tipus de disrupció</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">6 · Expedited air usage</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">% Expedited Air Freight usage by disruption</div>', unsafe_allow_html=True)
 
 if not df_air.empty:
     avg_air_share = df_air["expedited_air_share_pct"].mean()
@@ -828,14 +823,13 @@ if not df_air.empty:
 
     fig_air.update_layout(
         **base_layout(height=350),
-        xaxis=styled_xaxis(title="% d'enviaments amb Expedited Air Freight", ticksuffix="%"),
+        xaxis=styled_xaxis(title="% of orders using Expedited Air Freight", ticksuffix="%"),
         yaxis=styled_yaxis(showgrid=False),
         margin=dict(l=12, r=150, t=16, b=12),
     )
     st.plotly_chart(fig_air, use_container_width=True)
     st.caption(
-        "La línia puntejada és el % mitjà global d'ús d'aire expedit. "
-        "Les barres per sobre de la línia indiquen les disrupcions que activen "
-        "més freqüentment aquesta resposta d'emergència. "
-        "L'etiqueta mostra el cost premium associat quan s'activa."
+        "The dotted line represents the global average usage of expedited air freight. "
+        "Bars above the line indicate disruptions that more frequently trigger "
+        "this emergency response. The label shows the associated cost premium when activated."
     )

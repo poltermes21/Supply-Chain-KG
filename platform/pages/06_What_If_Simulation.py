@@ -211,7 +211,7 @@ tab_route, tab_node, tab_path = st.tabs([
 
 
 # ═══════════════════════════════════════════════
-# TAB 1 — ROUTE SHOCK
+# SECTION 1 — ROUTE SHOCK
 # ═══════════════════════════════════════════════
 with tab_route:
     st.markdown('<div class="section-title">Route Shock Simulation</div>', unsafe_allow_html=True)
@@ -265,7 +265,7 @@ with tab_route:
         displayed_routes = st.session_state.get("route_blocked", blocked_routes)
 
         if df_overview.empty:
-            st.info("The selected blockade does not affect any active shipments.")
+            st.info("The selected blockade does not affect any active orders.")
         else:
             ov = df_overview.iloc[0]
 
@@ -276,7 +276,7 @@ with tab_route:
                 <div class="callout-critical">
                     <strong>⚠ Critical Impact — {pct:.1f}% of network affected</strong><br>
                     Blocking <strong>{', '.join(displayed_routes)}</strong> would affect
-                    <strong>{int(ov['affected_shipments']):,} shipments</strong>.
+                    <strong>{int(ov['affected_orders']):,} orders</strong>.
                     This is a first-order disruption requiring immediate activation of alternative routes.
                 </div>""", unsafe_allow_html=True)
             else:
@@ -284,13 +284,13 @@ with tab_route:
                 <div class="callout-warn">
                     <strong>⚠ Moderate Impact — {pct:.1f}% of network affected</strong><br>
                     Blocking <strong>{', '.join(displayed_routes)}</strong> would affect
-                    <strong>{int(ov['affected_shipments']):,} shipments</strong>.
+                    <strong>{int(ov['affected_orders']):,} orders</strong>.
                 </div>""", unsafe_allow_html=True)
 
             # — KPI cards —
             k1, k2 = st.columns(2)
             kpi_data = [
-                (k1, "Affected Shipments",   f"{int(ov['affected_shipments']):,}", "#EF4444",
+                (k1, "Affected Orders",   f"{int(ov['affected_orders']):,}", "#EF4444",
                  "out of total network"),
                 (k2, "% Network Exposed",    f"{pct:.1f}%",                        "#F59E0B",
                  "of total volume")
@@ -318,6 +318,22 @@ with tab_route:
                 with col_san:
                     st.markdown('<div class="section-label">Reroutability — Sankey by shock status</div>',
                                 unsafe_allow_html=True)
+                    
+                    # — Legend —
+                    leg_cols = st.columns(len(SHOCK_STATUS))
+                    for i, (key, meta) in enumerate(SHOCK_STATUS.items()):
+                        with leg_cols[i]:
+                            st.markdown(f"""
+                            <div style="display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.75rem">
+                                <div style="min-width:10px;height:10px;border-radius:2px;
+                                            background:{meta['color']};margin-top:3px;flex-shrink:0"></div>
+                                <div>
+                                    <div style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;
+                                                font-weight:600;color:{meta['color']};letter-spacing:0.05em">
+                                        {meta['label']}
+                                    </div>
+                                </div>
+                            </div>""", unsafe_allow_html=True)
 
                     status_nodes = list(SHOCK_STATUS.keys())
                     city_nodes   = sorted(
@@ -331,22 +347,22 @@ with tab_route:
                     )
 
                     agg_status_origin = (
-                        df_reroute.groupby(["shock_status", "origin"])["affected_shipments"]
+                        df_reroute.groupby(["shock_status", "origin"])["affected_orders"]
                         .sum().reset_index()
                     )
-                    agg_od = df_reroute[["origin", "destination", "affected_shipments"]].copy()
+                    agg_od = df_reroute[["origin", "destination", "affected_orders"]].copy()
 
                     sources, targets, values, colors_link = [], [], [], []
                     for _, r in agg_status_origin.iterrows():
                         sources.append(node_map[r["shock_status"]])
                         targets.append(node_map[r["origin"]])
-                        values.append(int(r["affected_shipments"]))
+                        values.append(int(r["affected_orders"]))
                         colors_link.append(hex_to_rgba(SHOCK_STATUS.get(r["shock_status"], {}).get("color", "#6B7280")))
 
                     for _, r in agg_od.iterrows():
                         sources.append(node_map[r["origin"]])
                         targets.append(node_map[r["destination"]])
-                        values.append(int(r["affected_shipments"]))
+                        values.append(int(r["affected_orders"]))
                         colors_link.append(hex_to_rgba("#3B82F6"))
 
                     fig_sankey = go.Figure(go.Sankey(
@@ -401,12 +417,12 @@ with tab_route:
                     
                     df_rr_disp = df_rr_disp[[
                         "origin", "destination", "shock_status",
-                        "affected_shipments", "surviving_route_count",
+                        "affected_orders", "surviving_route_count",
                         "blocked_pct"
-                    ]].sort_values("affected_shipments", ascending=False).copy()
+                    ]].sort_values("affected_orders", ascending=False).copy()
                     df_rr_disp.columns = [
                         "Origin", "Destination", "Status",
-                        "Shipments", "Alt Routes", "Blocked Routes %"
+                        "Orders", "Alt Routes", "Blocked Routes %"
                     ]
 
                     n_stranded = (df_reroute["shock_status"] == "fully_blocked").sum()
@@ -432,51 +448,78 @@ with tab_route:
                 st.markdown('<div class="section-label">Penalty estimate — cost & delay per observed rerouting</div>',
                             unsafe_allow_html=True)
 
-                n_no_alt = (df_penalty["rerouting_feasibility"] == "no_observed_alternative").sum()
+                # — Filters —
+                f1, f2, f3 = st.columns(3)
+                with f1:
+                    origin_options = ["All"] + sorted(df_penalty["origin"].unique().tolist())
+                    pen_origin = st.selectbox("Origin", origin_options, key="pen_origin")
+                with f2:
+                    dest_options = ["All"] + sorted(df_penalty["destination"].unique().tolist())
+                    pen_dest = st.selectbox("Destination", dest_options, key="pen_dest")
+                with f3:
+                    route_options = ["All"] + sorted(df_penalty["blocked_route"].unique().tolist())
+                    pen_route = st.selectbox("Blocked Route", route_options, key="pen_route")
+
+                # Apply filters
+                df_pen_filtered = df_penalty.copy()
+                if pen_origin != "All":
+                    df_pen_filtered = df_pen_filtered[df_pen_filtered["origin"] == pen_origin]
+                if pen_dest != "All":
+                    df_pen_filtered = df_pen_filtered[df_pen_filtered["destination"] == pen_dest]
+                if pen_route != "All":
+                    df_pen_filtered = df_pen_filtered[df_pen_filtered["blocked_route"] == pen_route]
+
+                # Alert coherent with current filter
+                n_no_alt = (df_pen_filtered["rerouting_feasibility"] == "no_observed_alternative").sum()
                 if n_no_alt > 0:
                     st.markdown(f"""
                     <div class="callout-critical">
                         <strong>⚠ {n_no_alt} lane{"s" if n_no_alt>1 else ""} with no observed alternative</strong><br>
-                        No shipment history exists for alternative routes on
+                        No orders history exists for alternative routes on
                         {'these lanes' if n_no_alt>1 else 'this lane'}.
                         The real penalty would be unknown until a new route is activated.
                     </div>""", unsafe_allow_html=True)
 
-                df_pen_disp = df_penalty[[
-                    "origin", "destination", "blocked_route", "affected_shipments",
-                    "rerouting_feasibility", "alternative_route",
-                    "est_cost_delta_usd", "est_lead_delta_days"
-                ]].copy()
-                
-                df_pen_disp["rerouting_feasibility"] = df_pen_disp["rerouting_feasibility"].replace({
-                    "no_observed_alternative": "No observed alternative",
-                    "reroutable_from_history": "Reroutable"
-                })
-                df_pen_disp.columns = [
-                    "Origin", "Destination", "Blocked Route",
-                    "Shipments", "Feasibility", "Alternative Route",
-                    "Cost Δ (USD)", "Lead Time Δ (d)"
-                ]
+                if df_pen_filtered.empty:
+                    st.info("No lanes match the selected filters.")
+                else:
+                    df_pen_disp = df_pen_filtered[[
+                        "origin", "destination", "blocked_route", "affected_orders",
+                        "rerouting_feasibility", "alternative_route",
+                        "est_cost_delta_usd", "est_lead_delta_days"
+                    ]].copy()
 
-                st.dataframe(
-                    df_pen_disp.sort_values("Shipments", ascending=False),
-                    hide_index=True, use_container_width=True,
-                    column_config={
-                        "Shipments": st.column_config.NumberColumn("Shipments", format="%d"),
-                        "Cost Δ (USD)": st.column_config.NumberColumn("Cost Δ ($)", format="%.2f"),
-                    }
-                )
-                st.caption(
-                    "Cost Δ and Lead Time Δ based on observed alternative shipment history. "
-                    "Positive values = rerouting is more expensive/slower than the original route."
-                )
+                    df_pen_disp["rerouting_feasibility"] = df_pen_disp["rerouting_feasibility"].replace({
+                        "no_observed_alternative": "No observed alternative",
+                        "reroutable_from_history": "Reroutable"
+                    })
+                    df_pen_disp.columns = [
+                        "Origin", "Destination", "Blocked Route",
+                        "Orders", "Feasibility", "Alternative Route",
+                        "Cost Δ (USD)", "Lead Time Δ (d)"
+                    ]
+                    
+                    st.caption("Tip: you can sort directly in the table by clicking on column headers.")
+
+                    st.dataframe(
+                        df_pen_disp.sort_values("Orders", ascending=False),
+                        hide_index=True, use_container_width=True,
+                        column_config={
+                            "Orders": st.column_config.NumberColumn("Orders", format="%d"),
+                            "Cost Δ (USD)": st.column_config.NumberColumn("Cost Δ ($)", format="%.2f"),
+                        }
+                    )
+                    st.caption(
+                        "Cost Δ and Lead Time Δ based on observed alternative orders history. "
+                        "Positive values = rerouting is more expensive/slower than the original route."
+                    )
 
     elif run_route and not blocked_routes:
         st.info("Please select one or more routes to simulate a blockade.")
 
 
 # ═══════════════════════════════════════════════
-# TAB 2 — NODE FAILURE
+# SECTION 2 — NODE FAILURE
 # ═══════════════════════════════════════════════
 with tab_node:
     st.markdown('<div class="section-title">Node Failure Simulation</div>', unsafe_allow_html=True)
@@ -523,7 +566,7 @@ with tab_node:
         displayed_cities = st.session_state.get("node_blocked", blocked_cities)
 
         if df_local.empty:
-            st.info("The selected blockade does not affect any active shipments.")
+            st.info("The selected blockade does not affect any active orders.")
 
         # Critical hub callout
         critical_blocked = [c for c in displayed_cities if c in CRITICAL_HUBS]
@@ -542,18 +585,18 @@ with tab_node:
                         unsafe_allow_html=True)
             city_cols = st.columns(len(df_local))
             for i, (_, row) in enumerate(df_local.iterrows()):
-                total = int(row["total_affected_shipments"])
+                total = int(row["total_affected_orders"])
                 with city_cols[i]:
                     st.markdown(f"""
                     <div class="impact-card" style="border-left-color:#EF4444">
                         <div class="ic-label">🏙 {row['blocked_city']}</div>
                         <div class="ic-value" style="color:#EF4444">{total:,}</div>
-                        <div class="ic-sub">affected shipments</div>
+                        <div class="ic-sub">affected orders</div>
                     </div>
                     <div class="impact-card" style="border-left-color:#F59E0B;margin-top:0">
                         <div class="ic-label">Outbound</div>
                         <div class="ic-value" style="font-size:1.1rem">
-                            {int(row['outbound_shipments']):,}
+                            {int(row['outbound_orders']):,}
                             <span style="font-size:0.75rem;color:#6B7280">
                                 · {int(row['outbound_lanes'])} lanes
                             </span>
@@ -562,7 +605,7 @@ with tab_node:
                     <div class="impact-card" style="border-left-color:#3B82F6;margin-top:0">
                         <div class="ic-label">Inbound</div>
                         <div class="ic-value" style="font-size:1.1rem">
-                            {int(row['inbound_shipments']):,}
+                            {int(row['inbound_orders']):,}
                             <span style="font-size:0.75rem;color:#6B7280">
                                 · {int(row['inbound_lanes'])} lanes
                             </span>
@@ -578,10 +621,10 @@ with tab_node:
 
             df_g = df_global.copy()
             df_g["lane"] = df_g["origin"] + " → " + df_g["destination"]
-            df_g = df_g.sort_values("affected_shipments", ascending=True).head(20)
+            df_g = df_g.sort_values("affected_orders", ascending=True).head(20)
 
             fig_node = go.Figure(go.Bar(
-                x=df_g["affected_shipments"],
+                x=df_g["affected_orders"],
                 y=df_g["lane"],
                 orientation="h",
                 marker=dict(
@@ -595,12 +638,12 @@ with tab_node:
                     ),
                     showscale=True,
                 ),
-                text=[f"{int(v):,} shipments" for v in df_g["affected_shipments"]],
+                text=[f"{int(v):,} orders" for v in df_g["affected_orders"]],
                 textposition="none",
                 textfont=dict(size=9, family=FONT_MONO, color=TEXT_COLOR),
                 hovertemplate=(
                     "<b>%{y}</b><br>"
-                    "Affected: %{x:,} shipments<br>"
+                    "Affected: %{x:,} orders<br>"
                     "Risk score: %{customdata[0]:.4f}<br>"
                     "Avg cost: $%{customdata[1]:,.0f}<br>"
                     "Avg LT: %{customdata[2]:.1f}d"
@@ -610,7 +653,7 @@ with tab_node:
             ))
             fig_node.update_layout(
                 **base_layout(height=max(320, len(df_g) * 34 + 60)),
-                xaxis=styled_xaxis(title="Affected shipments"),
+                xaxis=styled_xaxis(title="Affected orders"),
                 yaxis=styled_yaxis(showgrid=False),
                 margin=dict(l=12, r=160, t=16, b=12),
             )
@@ -625,7 +668,7 @@ with tab_node:
 
 
 # ═══════════════════════════════════════════════
-# TAB 3 — PATH OPTIMIZATION
+# SECTION 3 — PATH OPTIMIZATION
 # ═══════════════════════════════════════════════
 with tab_path:
     st.markdown('<div class="section-title">Emergency Path Optimization</div>', unsafe_allow_html=True)
