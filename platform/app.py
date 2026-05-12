@@ -1,5 +1,5 @@
 import streamlit as st
-from connection import get_neo4j_driver
+from shared.connection import get_neo4j_driver
 from analysis.queriesv2 import Block1Queries
 
 # 1. Page Configuration (Must be the first Streamlit command)

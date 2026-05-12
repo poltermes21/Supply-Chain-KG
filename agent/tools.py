@@ -15,7 +15,7 @@ import json
 from typing import Any
 
 from langchain_core.tools import tool
-from connection import get_neo4j_driver
+from shared.connection import get_neo4j_driver
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Security: static validator (shared by both Neo4j tools)
@@ -48,9 +48,18 @@ _ALLOWED_RELS = {
 
 _LABEL_RE = re.compile(r"\([^)]+:([A-Za-z][A-Za-z0-9_]*)")
 _REL_RE = re.compile(r"\[[^\]]*:([A-Z_][A-Z0-9_]*)")
+_LIMIT_RE = re.compile(r"\bLIMIT\s+(\d+)\b", re.IGNORECASE)
 
 _MAX_RECORDS = 30   # observation size cap — keeps ReAct context bounded
 
+def _ensure_limit(cypher: str, default_limit: int = 30) -> str:
+    """
+    If the query has no LIMIT clause, append one automatically.
+    """
+    if not _LIMIT_RE.search(cypher):
+        cypher = cypher.rstrip().rstrip(";")
+        cypher += f"\nLIMIT {default_limit}"
+    return cypher
 
 def _validate(cypher: str) -> None:
     """Raise ValueError with a descriptive message if the query is unsafe."""
@@ -75,7 +84,7 @@ def _validate(cypher: str) -> None:
 
     # 4. Must have LIMIT
     if "LIMIT" not in cypher.upper():
-        raise ValueError("Query must include a LIMIT clause (max 30 recommended).")
+        cypher = _ensure_limit(cypher)
 
     # 5. Unknown node labels
     unknown_labels = set(_LABEL_RE.findall(cypher)) - _ALLOWED_LABELS
@@ -126,6 +135,7 @@ def query_graph(cypher: str) -> str:
     If the query is invalid or unsafe, returns an error string starting with 'ERROR:'.
     """
     try:
+        cypher = _ensure_limit(cypher)
         _validate(cypher)
         records = _run_read(cypher)
         if not records:
@@ -158,3 +168,42 @@ def answer_from_context(reasoning: str) -> str:
     The content will be returned directly to the user.
     """
     return reasoning
+
+
+if __name__ == "__main__":
+
+    test_queries = [
+        # No LIMIT → should append LIMIT 30
+        """
+        MATCH (o:Order)
+        RETURN o
+        """,
+
+        # Existing LIMIT → should keep it
+        """
+        MATCH (c:City)
+        RETURN c.name
+        LIMIT 10
+        """,
+    ]
+
+    for i, query in enumerate(test_queries, start=1):
+        print(f"\n{'=' * 60}")
+        print(f"TEST {i}")
+        print(f"{'=' * 60}")
+
+        print("\nOriginal query:")
+        print(query)
+
+        try:
+            sanitized = _ensure_limit(query)
+
+            print("\nSanitized query:")
+            print(sanitized)
+
+            _validate(sanitized)
+
+            print("\nValidation: OK")
+
+        except Exception as e:
+            print(f"\nERROR: {e}")
