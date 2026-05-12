@@ -5,14 +5,8 @@ import pandas as pd
 from shared.connection import get_neo4j_driver
 from analysis.queriesv2 import Block4Queries
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
 st.set_page_config(page_title="Geographic Analysis", layout="wide")
 
-# ─────────────────────────────────────────────
-# SHARED STYLE
-# ─────────────────────────────────────────────
 FONT_SANS   = "IBM Plex Sans, sans-serif"
 FONT_MONO   = "IBM Plex Mono, monospace"
 GRID_COLOR  = "#2A2D3A"
@@ -20,7 +14,6 @@ AXIS_COLOR  = "#6B7280"
 TEXT_COLOR  = "#E5E7EB"
 TRANSPARENT = "rgba(0,0,0,0)"
 
-# Community colour palette — stable across all sections
 COMMUNITY_PALETTE = [
     "#F59E0B", "#3B82F6", "#10B981", "#EF4444",
     "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16",
@@ -59,9 +52,6 @@ def styled_yaxis(**kwargs):
     d.update(kwargs)
     return d
 
-# ─────────────────────────────────────────────
-# CSS
-# ─────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
@@ -164,20 +154,17 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
+
 # HEADER
-# ─────────────────────────────────────────────
 st.markdown('<div class="section-label">Block 4</div>', unsafe_allow_html=True)
-st.markdown("# 🌍 Geographic Analysis & Community Detection")
+st.markdown("# Geographic Analysis & Community Detection")
 st.markdown(
     "Territorial flow exposure and logistics community structure — "
     "identifies natural clusters, geographic dependencies and inter-cluster fragilities."
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
 # DATA LOADING
-# ─────────────────────────────────────────────
 driver = get_neo4j_driver()
 
 @st.cache_data(ttl=3600)
@@ -193,9 +180,8 @@ df_louvain   = data.get("louvain_write_stats", pd.DataFrame())
 df_comm      = data.get("communities_by_city", pd.DataFrame())
 df_inter     = data.get("inter_community_flows", pd.DataFrame())
 
-# ─────────────────────────────────────────────
+
 # PREPROCESS
-# ─────────────────────────────────────────────
 # Assign stable community colours
 if not df_comm.empty:
     community_ids = sorted(df_comm["community_id"].unique())
@@ -219,9 +205,8 @@ if not df_inter.empty:
     isolated_communities = list(set(isolated_communities + single_outbound))
 
 
-# ═══════════════════════════════════════════════
-# SECTION 1 — Flow Exposure
-# ═══════════════════════════════════════════════
+# SECTION 1 - Flow Exposure
+
 st.markdown('<div class="section-title">1 · Flow exposure per node</div>', unsafe_allow_html=True)
 
 toggle_col, _ = st.columns([1, 3])
@@ -239,7 +224,6 @@ if granularity == "City" and not df_city.empty:
     label_out = "Outbound orders"
     label_in  = "Inbound orders"
     x_title   = "Orders"
-    # Use degree-based columns if orders columns not present
     out_col = "outbound"
     in_col  = "inbound"
 elif not df_country.empty:
@@ -262,7 +246,7 @@ if not df_mirror.empty and out_col in df_mirror.columns:
 
     fig_mirror = go.Figure()
 
-    # Left — outbound (negative for mirror)
+    # Left - outbound
     fig_mirror.add_trace(go.Bar(
         name=label_out,
         x=-df_mirror[out_col],
@@ -273,7 +257,7 @@ if not df_mirror.empty and out_col in df_mirror.columns:
         hovertemplate="<b>%{y}</b><br>Outbound: %{customdata:,}<extra></extra>",
         customdata=df_mirror[out_col],
     ))
-    # Right — inbound
+    # Right - inbound
     fig_mirror.add_trace(go.Bar(
         name=label_in,
         x=df_mirror[in_col],
@@ -322,9 +306,8 @@ if not df_mirror.empty and out_col in df_mirror.columns:
             )
 
 
-# ═══════════════════════════════════════════════
-# SECTION 2 — Communities
-# ═══════════════════════════════════════════════
+# SECTION 2 - Communities
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">2 · Logistics communities</div>', unsafe_allow_html=True)
 
@@ -443,9 +426,9 @@ with col_search:
         )
 
 
-# ═══════════════════════════════════════════════
-# SECTION 3 —Inter-community dependencies
-# ═══════════════════════════════════════════════
+
+# SECTION 3 - Inter-community dependencies
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">3 · Inter-community dependencies</div>', unsafe_allow_html=True)
 
@@ -545,7 +528,7 @@ if not df_inter.empty:
     # Sankey
     st.markdown('<div class="section-label">Sankey — aggregated inter-community flows</div>', unsafe_allow_html=True)
 
-    # Aggregate by from_community → to_community
+    # Aggregate by from_community -> to_community
     df_agg = (
         df_inter.groupby(["from_community", "to_community"])
         .agg(orders=("orders", "sum"), routes=("routes", "first"))

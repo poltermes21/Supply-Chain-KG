@@ -1,10 +1,11 @@
 """
-agent/tools.py
-The three tools available to the ReAct agent.
+Agent Tools Module
 
-query_graph        — generate + validate + execute a Cypher query
-get_entity_details — fetch full details for a known entity ID
-answer_from_context — signal that no new query is needed (context is enough)
+Core tools for the ReAct agent to interact with the Supply Chain Knowledge Graph.
+
+Tools:
+- query_graph: executes validated Cypher queries on Neo4j
+- answer_from_context: answers using only existing conversation context
 
 All tools are read-only. The validator runs inside every tool that touches Neo4j,
 acting as a hard firewall independent of the LLM's behaviour.
@@ -16,10 +17,6 @@ from typing import Any
 
 from langchain_core.tools import tool
 from shared.connection import get_neo4j_driver
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Security: static validator (shared by both Neo4j tools)
-# ─────────────────────────────────────────────────────────────────────────────
 
 _WRITE_RE = re.compile(
     r"\b(MERGE|CREATE|DELETE|DETACH\s+DELETE|SET|REMOVE|DROP)\b",
@@ -50,7 +47,7 @@ _LABEL_RE = re.compile(r"\([^)]+:([A-Za-z][A-Za-z0-9_]*)")
 _REL_RE = re.compile(r"\[[^\]]*:([A-Z_][A-Z0-9_]*)")
 _LIMIT_RE = re.compile(r"\bLIMIT\s+(\d+)\b", re.IGNORECASE)
 
-_MAX_RECORDS = 30   # observation size cap — keeps ReAct context bounded
+_MAX_RECORDS = 30   # observation size cap, keeps ReAct context bounded
 
 def _ensure_limit(cypher: str, default_limit: int = 30) -> str:
     """
@@ -84,7 +81,7 @@ def _validate(cypher: str) -> None:
 
     # 4. Must have LIMIT
     if "LIMIT" not in cypher.upper():
-        cypher = _ensure_limit(cypher)
+        raise ValueError("Query must include a LIMIT clause (recommended limit: 30).")
 
     # 5. Unknown node labels
     unknown_labels = set(_LABEL_RE.findall(cypher)) - _ALLOWED_LABELS
@@ -115,9 +112,7 @@ def _run_read(cypher: str, params: dict | None = None) -> list[dict]:
         return session.execute_read(_tx)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tool 1 — query_graph
-# ─────────────────────────────────────────────────────────────────────────────
+# Tool 1 - query_graph
 
 @tool
 def query_graph(cypher: str) -> str:
@@ -147,9 +142,7 @@ def query_graph(cypher: str) -> str:
         return f"ERROR (execution): {e}"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tool 2 — answer_from_context
-# ─────────────────────────────────────────────────────────────────────────────
+# Tool 2 - answer_from_context
 
 @tool
 def answer_from_context(reasoning: str) -> str:
@@ -168,42 +161,3 @@ def answer_from_context(reasoning: str) -> str:
     The content will be returned directly to the user.
     """
     return reasoning
-
-
-if __name__ == "__main__":
-
-    test_queries = [
-        # No LIMIT → should append LIMIT 30
-        """
-        MATCH (o:Order)
-        RETURN o
-        """,
-
-        # Existing LIMIT → should keep it
-        """
-        MATCH (c:City)
-        RETURN c.name
-        LIMIT 10
-        """,
-    ]
-
-    for i, query in enumerate(test_queries, start=1):
-        print(f"\n{'=' * 60}")
-        print(f"TEST {i}")
-        print(f"{'=' * 60}")
-
-        print("\nOriginal query:")
-        print(query)
-
-        try:
-            sanitized = _ensure_limit(query)
-
-            print("\nSanitized query:")
-            print(sanitized)
-
-            _validate(sanitized)
-
-            print("\nValidation: OK")
-
-        except Exception as e:
-            print(f"\nERROR: {e}")

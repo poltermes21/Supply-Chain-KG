@@ -1,12 +1,9 @@
 """
-agent/graph.py
-ReAct agent entry point.
+ReAct Agent Module
 
-Architecture:
-  1. Chitchat fast-path  — Interficie Model classifies + responds, no tools invoked.
-  2. ReAct loop          — Reasoning Model drives Thought → tool call → Observation,
-                           max 4 iterations, bounded observation size (see tools.py).
-  3. Memory              — last 5 turns injected as message history each call.
+Main entry point of the ReAct agent. Orchestrates the full reasoning pipeline:
+chitchat fast-path, history-based answering, and tool-augmented Cypher reasoning
+via a LangGraph ReAct loop.
 """
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage

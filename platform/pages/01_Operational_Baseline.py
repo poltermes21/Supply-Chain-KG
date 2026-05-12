@@ -3,17 +3,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
+import json as _json
 from shared.connection import get_neo4j_driver
 from analysis.queriesv2 import Block1Queries
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
 st.set_page_config(page_title="Operational Baseline", layout="wide")
 
-# ─────────────────────────────────────────────
-# PLOTLY SHARED STYLE HELPERS
-# ─────────────────────────────────────────────
 FONT_SANS   = "IBM Plex Sans, sans-serif"
 FONT_MONO   = "IBM Plex Mono, monospace"
 GRID_COLOR  = "#2A2D3A"
@@ -67,9 +62,6 @@ def styled_yaxis(**kwargs):
     d.update(kwargs)
     return d
 
-# ─────────────────────────────────────────────
-# CSS
-# ─────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
@@ -194,20 +186,17 @@ h1, h2, h3 {
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
+
 # HEADER
-# ─────────────────────────────────────────────
 st.markdown('<div class="section-label">Block 1</div>', unsafe_allow_html=True)
-st.markdown("# 📦 Operational Baseline")
+st.markdown("# Operational Baseline")
 st.markdown(
     "System-wide performance characterization under observed conditions — "
     "volume, efficiency, delay exposure and structural resilience."
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
 # DATA LOADING
-# ─────────────────────────────────────────────
 driver = get_neo4j_driver()
 
 @st.cache_data(ttl=600)
@@ -232,9 +221,8 @@ df_temporal["date"] = pd.to_datetime(
 palette_prod = px.colors.qualitative.Safe
 
 
-# ═══════════════════════════════════════════════
-# SECTION 1 — KPIs baseline
-# ═══════════════════════════════════════════════
+# SECTION 1 - KPIs baseline
+
 st.markdown('<div class="section-title">1 · KPIs baseline</div>', unsafe_allow_html=True)
 
 col_v, col_r = st.columns(2)
@@ -296,7 +284,7 @@ with col_r:
 
 st.markdown("")
 
-# — Temporal Perfomance —
+# Temporal Perfomance
 st.markdown('<div class="section-label">Temporal Performance</div>', unsafe_allow_html=True)
 
 metric_map = {
@@ -384,7 +372,7 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# — Transport Mode side-by-side —
+# Transport Mode
 st.markdown('<div class="section-label">Transport Mode Split</div>', unsafe_allow_html=True)
 
 if len(df_mode) >= 2:
@@ -430,9 +418,8 @@ if len(df_mode) >= 2:
             st.plotly_chart(fig, use_container_width=True)
 
 
-# ═══════════════════════════════════════════════
-# SECTION 2 — Traffic distribution
-# ═══════════════════════════════════════════════
+# SECTION 2 - Traffic distribution
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">2 · Traffic distribution</div>', unsafe_allow_html=True)
 
@@ -505,7 +492,7 @@ with col_right:
     )
     st.plotly_chart(fig_radar, use_container_width=True)
 
-with st.expander("📋 Detailed table by route"):
+with st.expander("Detailed table by route"):
     st.caption("Tip: you can sort directly in the table by clicking on column headers.")
     df_display = df_route[["route", "total_orders", "pct_total", "avg_lead_time_days", "avg_cost_usd", "avg_delay_days", "delay_rate_pct"]].copy()
     df_display.columns = ["Route", "Orders", "% Total", "Avg LT (d)", "Avg Cost ($)", "Avg Delay (d)", "Delay Rate (%)"]
@@ -552,9 +539,8 @@ fig_stacked.update_layout(
 st.plotly_chart(fig_stacked, use_container_width=True)
 
 
-# ═══════════════════════════════════════════════
-# SECTION 3 — Operational Risk
-# ═══════════════════════════════════════════════
+# SECTION 3 - Operational Risk
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">3 · Operational Risk</div>', unsafe_allow_html=True)
 
@@ -689,15 +675,12 @@ with col_scatter:
     st.plotly_chart(fig_scatter, use_container_width=True)
 
 
-# ═══════════════════════════════════════════════
-# SECTION 4 — OD Lane Resilience
-# ═══════════════════════════════════════════════
+# SECTION 4 - OD Lane Resilience
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">4 · OD Lane Resilience</div>', unsafe_allow_html=True)
 
-# ── Parse route_share JSON ──────────────────────────────────────────────────
-import json as _json
-
+# Parse route_share JSON
 def _parse_route_share(val):
     if isinstance(val, dict):
         return val
@@ -708,7 +691,7 @@ def _parse_route_share(val):
 
 df_od["_route_share"] = df_od["route_share"].apply(_parse_route_share)
 
-# ── KPI strip ───────────────────────────────────────────────────────────────
+# KPI strip
 single   = (df_od["redundancy_profile"] == "single_route").sum()
 high_con = (df_od["redundancy_profile"] == "highly_concentrated").sum()
 mod_con  = (df_od["redundancy_profile"] == "moderately_concentrated").sum()
@@ -736,7 +719,7 @@ for col, label, value, sub, css_class in kpi_od_data:
 
 st.markdown("")
 
-# ── Controls ────────────────────────────────────────────────────────────────
+# Controls
 metric_options = {
     "Total Orders":         "orders",
     "Route Concentration":     "route_concentration",
@@ -749,7 +732,7 @@ selected_metric = metric_options[selected_metric_label]
 
 col_heat, col_right = st.columns([3, 1])
 
-# ── Heatmap ─────────────────────────────────────────────────────────────────
+# Heatmap
 with col_heat:
     st.markdown('<div class="section-label">OD Heatmap — selected metric intensity</div>', unsafe_allow_html=True)
 
@@ -786,7 +769,7 @@ with col_heat:
     )
     st.plotly_chart(fig_heat, use_container_width=True)
 
-# ── Right column: redundancy profile + top-risk lanes ───────────────────────
+# Right column: redundancy profile + top-risk lanes
 with col_right:
     # Redundancy profile donut
     st.markdown('<div class="section-label">Redundancy profile</div>', unsafe_allow_html=True)
@@ -822,7 +805,7 @@ with col_right:
     )
     st.plotly_chart(fig_donut, use_container_width=True)
 
-# ── Route share distribution scatter ────────────────────────────────────────
+# Route share distribution scatter
 st.markdown('<div class="section-label">Route concentration vs delay rate — bubble = orders volume</div>', unsafe_allow_html=True)
 
 profile_color_map = {
@@ -866,7 +849,7 @@ fig_scatter.update_layout(
 )
 st.plotly_chart(fig_scatter, use_container_width=True)
 
-# ── Detailed lane analysis ─────────────────────────────────────────────────────────────
+# Detailed lane analysis
 st.markdown('<div class="section-label">Detailed Lane Analysis</div>', unsafe_allow_html=True)
 
 origins = sorted(df_od["origin"].unique())

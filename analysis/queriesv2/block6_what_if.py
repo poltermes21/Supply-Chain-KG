@@ -1,6 +1,4 @@
 """
-block6_whatif.py
-
 Block 6 — What-If Analysis and Failure Scenarios
 "What happens if a route or a critical city fails?"
 

@@ -1,13 +1,13 @@
 """
-agent/prompts.py
-All system prompts in one place.
+Prompts Module
+
+Centralized definitions of all system prompts used by the ReAct agent,
+including schema context and behavior instructions.
 """
 
 from .schema import KG_SCHEMA_PROMPT
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Chitchat filter (fast path, no tools)
-# ─────────────────────────────────────────────────────────────────────────────
 
 CHITCHAT_SYSTEM = """You are a Supply Chain Knowledge Graph assistant.
 When the user greets you or makes small talk, respond warmly and briefly in the SAME LANGUAGE.
@@ -27,9 +27,7 @@ Return ONLY one word: "chitchat" or "query".
 "query"    = any question or request about supply chain data, routes, orders, delays, risk, etc., even if it also includes a greeting.
 """
 
-# ─────────────────────────────────────────────────────────────────────────────
 # ReAct agent system prompt
-# ─────────────────────────────────────────────────────────────────────────────
 
 REACT_SYSTEM = f"""You are an expert Supply Chain Analyst with access to a Neo4j knowledge graph.
 You reason step by step and use tools to answer questions accurately.

@@ -7,7 +7,6 @@ rng = np.random.default_rng(SEED)
 
 
 # HELPERS
-
 def weighted_choice(options: list, weights: list):
     """Return a single element sampled from options according to weights."""
     w = np.array(weights, dtype=float)

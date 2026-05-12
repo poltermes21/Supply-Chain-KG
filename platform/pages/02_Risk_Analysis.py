@@ -6,14 +6,8 @@ import pandas as pd
 from shared.connection import get_neo4j_driver
 from analysis.queriesv2 import Block2Queries
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
 st.set_page_config(page_title="Risk Analysis", layout="wide")
 
-# ─────────────────────────────────────────────
-# SHARED STYLE
-# ─────────────────────────────────────────────
 FONT_SANS   = "IBM Plex Sans, sans-serif"
 FONT_MONO   = "IBM Plex Mono, monospace"
 GRID_COLOR  = "#2A2D3A"
@@ -64,9 +58,6 @@ def styled_yaxis(**kwargs):
     d.update(kwargs)
     return d
 
-# ─────────────────────────────────────────────
-# CSS
-# ─────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
@@ -179,20 +170,16 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
 # HEADER
-# ─────────────────────────────────────────────
 st.markdown('<div class="section-label">Block 2</div>', unsafe_allow_html=True)
-st.markdown("# ⚠️ Multidimensional Risk Analysis")
+st.markdown("# Multidimensional Risk Analysis")
 st.markdown(
     "Risk exposure characterization across routes, products and geographies — "
     "and validation that the risk model predicts real operational outcomes."
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
 # DATA LOADING
-# ─────────────────────────────────────────────
 driver = get_neo4j_driver()
 
 # Joint risk sliders
@@ -221,12 +208,12 @@ for df in [df_global, df_route, df_product]:
         df["risk_level"] = df["risk_level"].str.lower()
 
 
-# ═══════════════════════════════════════════════
-# SECTION 1 — Global risk profile
-# ═══════════════════════════════════════════════
+
+# SECTION 1 - Global risk profile
+
 st.markdown('<div class="section-title">1 · Global risk profile</div>', unsafe_allow_html=True)
 
-# — Max values for proportional progress bars —
+# Max values for proportional progress bars
 max_disruption = df_global["disruption_rate_pct"].max()
 max_delay      = df_global["delay_rate_pct"].max()
 max_delay_days = df_global["avg_delay_days"].max()
@@ -246,7 +233,7 @@ for i, level in enumerate(RISK_ORDER):
     delay_rate   = row["delay_rate_pct"]
     delay_days   = row["avg_delay_days"]
 
-    # Progress bar widths (proportional to max across all levels)
+    # Progress bar widths
     w_dis = disruption / max_disruption * 100
     w_del = delay_rate / max_delay * 100
     w_dd  = delay_days / max_delay_days * 100
@@ -287,7 +274,7 @@ for i, level in enumerate(RISK_ORDER):
 
 st.markdown("")
 
-# — Risk correlation → outcome (dot + line) —
+# Risk correlation -> outcome (dot + line)
 st.markdown('<div class="section-label">Model validation — does risk predict disruption?</div>', unsafe_allow_html=True)
 
 df_corr = df_global.copy()
@@ -352,9 +339,8 @@ st.plotly_chart(fig_corr, use_container_width=True)
 st.caption("Bars (right axis) show the average risk score per level. Lines (left axis) validate that disruption and delay increase monotonically with assigned risk.")
 
 
-# ═══════════════════════════════════════════════
-# SECTION 2 — Risk Concentration
-# ═══════════════════════════════════════════════
+# SECTION 2 - Risk Concentration
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">2 · Risk Concentration</div>', unsafe_allow_html=True)
 
@@ -431,9 +417,8 @@ with tab_product:
     )
 
 
-# ═══════════════════════════════════════════════
-# SECTION 3 — Risk by Geographic Node
-# ═══════════════════════════════════════════════
+# SECTION 3 - Risk by Geographic Node
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">3 · Risk by geographic node</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Mirror chart — outbound (left) vs inbound (right) by combined risk score</div>', unsafe_allow_html=True)
@@ -474,7 +459,7 @@ fig_mirror = make_subplots(
     column_titles=["← Outbound (origen)", "Inbound (destí) →"],
 )
 
-# LEFT side — outbound (values go negative for mirror effect)
+# LEFT side - outbound
 fig_mirror.add_trace(go.Bar(
     name="Geoplitical",
     x=-df_mirror["out_geo"],
@@ -499,7 +484,7 @@ fig_mirror.add_trace(go.Bar(
     legendgroup="weather",
 ), row=1, col=1)
 
-# RIGHT side — inbound
+# RIGHT side - inbound
 fig_mirror.add_trace(go.Bar(
     name="Geo (inbound)",
     x=df_mirror["in_geo"],
@@ -572,9 +557,8 @@ st.caption(
 )
 
 
-# ═══════════════════════════════════════════════
-# SECTION 4 — Joint Risk Exposure
-# ═══════════════════════════════════════════════
+# SECTION 4 - Joint Risk Exposure
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">4 · Joint Exposure — risk overlap</div>', unsafe_allow_html=True)
 
@@ -703,9 +687,8 @@ else:
     st.caption("Routes with simultaneous exposure to geopolitical and weather risk above the threshold. Color = combined risk score (red = higher).")
 
 
-# ═══════════════════════════════════════════════
-# SECTION 5 — Critical Lanes
-# ═══════════════════════════════════════════════
+# SECTION 5 - Critical Lanes
+
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">5 · Critical lanes by risk and volume</div>', unsafe_allow_html=True)
 
@@ -790,20 +773,20 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-# — TOP selection —
+# TOP selection
 df_top = df_plot.sort_values(metric, ascending=False).head(top_n)
 top_ids = set(df_top.index)
 
-# — Mode switch —
+# Mode switch
 df_plot = df_top.copy() if view_mode == "Only Top" else df_plot.copy()
 
-# — Labels —
+# Labels
 labels = [
     f"{row['origin']}→{row['destination']}" if idx in top_ids else ""
     for idx, row in df_plot.iterrows()
 ]
 
-# — Quadrant reference lines —
+# Quadrant reference lines
 avg_risk_lanes = df_lanes["avg_combined_risk_score"].mean()
 avg_disr_lanes = df_lanes["disrupted_rate_pct"].mean()
 
@@ -834,7 +817,7 @@ fig_lanes.add_vline(
     x=avg_disr_lanes, line_dash="dot", line_color="#4B5563", line_width=1
 )
 
-# — Bubble styling —
+# Bubble styling
 sizes = df_plot["orders"] / df_lanes["orders"].max() * 40 + 6
 
 border_colors = [
@@ -852,12 +835,12 @@ opacities = [
     for idx in df_plot.index
 ]
 
-# — Ajuste visual en Only Top —
+# Ajuste visual en Only Top
 if view_mode == "Only Top":
     opacities = [1.0] * len(df_plot)
     border_widths = [2] * len(df_plot)
 
-# — Customdata —
+# Customdata
 customdata = list(zip(
     df_plot["orders"],
     df_plot["delay_rate_pct"],
@@ -865,7 +848,7 @@ customdata = list(zip(
     df_plot["origin"] + "→" + df_plot["destination"]
 ))
 
-# — Scatter plot —
+# Scatter plot
 fig_lanes.add_trace(go.Scatter(
     x=df_plot["disrupted_rate_pct"],
     y=df_plot["avg_combined_risk_score"],

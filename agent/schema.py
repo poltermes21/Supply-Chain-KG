@@ -1,6 +1,8 @@
 """
-agent/schema.py
-Knowledge Graph schema
+Knowledge Graph Schema Module
+
+Defines the full schema and prompt used by the ReAct agent to understand
+the Supply Chain Knowledge Graph structure and constraints.
 """
 
 KG_SCHEMA_PROMPT = """

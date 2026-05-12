@@ -2,8 +2,8 @@
 Graph Builder Orchestrator - Supply Chain Knowledge Graph
 
 Runs the full KG construction pipeline in sequence:
-    1. Extract  → KGExtractor      extracts nodes and relationships from the transformed CSV
-    2. Load     → KGLoaderNeo4j    loads nodes and relationships into Neo4j
+    1. Extract  -> KGExtractor      extracts nodes and relationships from the transformed CSV
+    2. Load     -> KGLoaderNeo4j    loads nodes and relationships into Neo4j
 
 Inputs:
     - data/data_transformed.csv

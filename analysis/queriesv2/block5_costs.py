@@ -1,6 +1,4 @@
 """
-block5_costs.py
-
 Block 5 — Cost Analysis and Mitigation Efficiency
 "How costly are disruptions and how effective are mitigation responses?"
 

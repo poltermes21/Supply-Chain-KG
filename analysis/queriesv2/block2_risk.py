@@ -1,6 +1,4 @@
 """
-block2_risk.py
-
 Block 2 — Multidimensional Risk Analysis
 "Where does risk concentrate and how strongly does it translate into disruption?"
 
