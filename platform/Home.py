@@ -2,7 +2,7 @@ import streamlit as st
 from shared.connection import get_neo4j_driver
 from analysis.queriesv2 import Block1Queries
 
-# 1. Page Configuration (Must be the first Streamlit command)
+# 1. Page Configuration
 st.set_page_config(
     page_title="Supply Chain Resilience KG",
     page_icon="🌐",
@@ -13,7 +13,7 @@ st.set_page_config(
 driver = get_neo4j_driver()
 
 # 3. Hero Section (Landing Page Header)
-st.title("🌐 Knowledge Graph-Based Supply Chain Architecture")
+st.title("Knowledge Graph-Based Supply Chain Architecture")
 st.subheader("Decision Support System with Resilience Analysis")
 
 st.markdown("""
@@ -24,7 +24,7 @@ This platform enables the exploration of global supply chain resilience through
 st.divider()
 
 # 4. Global Network Status (Data from Block 1)
-st.header("📊 Global Network Health")
+st.header("Global Network Health")
 
 # We wrap the data fetching in a spinner for better UX
 with st.spinner("Fetching operational baseline..."):
