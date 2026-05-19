@@ -6,6 +6,7 @@ Adapted for the ReAct agent: uses agent.run(), supports multi-query Cypher audit
 
 import streamlit as st
 import uuid
+import re
 from agent import run as agent_run, get_memory
 
 st.set_page_config(page_title="KG Chat", layout="wide")
@@ -151,11 +152,23 @@ with st.sidebar:
         st.caption(f"• {s}")
 
 # HELPERS
+def md_to_html(text: str) -> str:
+    """Convert basic Markdown to HTML for unsafe_allow_html rendering."""
+    # Bold
+    text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+    # Italic
+    text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
+    # Inline code
+    text = re.sub(r'`(.*?)`', r'<code>\1</code>', text)
+    # Line breaks
+    text = text.replace('\n', '<br>')
+    return text
+
 def render_user_msg(content: str) -> None:
     st.markdown(
         f'<div class="msg-user">'
         f'<div class="msg-label msg-label-user">You</div>'
-        f'{content}'
+        f'{md_to_html(content)}'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -173,7 +186,7 @@ def render_assistant_msg(
     st.markdown(
         f'<div class="msg-assistant">'
         f'<div class="msg-label msg-label-assistant">Agent{iter_badge}</div>'
-        f'{content}'
+        f'{md_to_html(content)}'
         f'</div>',
         unsafe_allow_html=True,
     )

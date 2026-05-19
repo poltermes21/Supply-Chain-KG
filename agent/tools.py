@@ -123,7 +123,7 @@ def query_graph(cypher: str) -> str:
     aggregations, filters, rankings, path queries, etc.
 
     The query MUST be read-only (no MERGE, CREATE, DELETE, SET).
-    Always include a LIMIT clause.
+    ALWAYS include a LIMIT clause.
     Use only node labels and relationship types defined in the schema.
 
     Returns a JSON-serialised list of records (max 30).

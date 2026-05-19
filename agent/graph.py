@@ -138,9 +138,7 @@ def _count_tool_calls(messages: list) -> int:
     return count
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Public run() function
-# ─────────────────────────────────────────────────────────────────────────────
 
 def run(question: str, session_id: str = "default") -> AgentOutput:
     """
@@ -179,7 +177,7 @@ def run(question: str, session_id: str = "default") -> AgentOutput:
         memory.add_turn(question, answer)
         return AgentOutput(answer=answer)
 
-    # Inject history inside  HumanMessage
+    # Inject history inside HumanMessage
     if history_str:
         full_question = (
             f"## Conversation history\n{history_str}\n\n"
@@ -200,7 +198,7 @@ def run(question: str, session_id: str = "default") -> AgentOutput:
     cypher_queries = _extract_cypher_queries(result["messages"])
     iterations = _count_tool_calls(result["messages"])
 
-    # ── 5. Persist turn to memory ─────────────────────────────────────────────
+    # 5. Persist turn to memorY
     memory.add_turn(question, final_answer)
 
     return AgentOutput(

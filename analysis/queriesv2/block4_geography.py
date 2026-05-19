@@ -120,6 +120,44 @@ class Block4Queries:
             round(f.avg_lead_time_days, 2) AS avg_lead_time_days
         ORDER BY orders DESC
     """
+    
+    # 4.6 INTRA-COMMUNITY SUMMARY
+    
+    INTRA_COMMUNITY_SUMMARY = """
+        MATCH (a:City)-[f:CITY_FLOW]->(b:City)
+        WHERE a.community_id IS NOT NULL
+        AND b.community_id IS NOT NULL
+        AND a.community_id = b.community_id
+        RETURN
+            a.community_id                              AS community_id,
+            count(f)                                    AS internal_links,
+            sum(f.orders)                               AS total_orders,
+            round(avg(f.delay_rate_pct), 2)             AS avg_delay_rate_pct,
+            round(avg(f.disrupted_rate_pct), 2)         AS avg_disrupted_rate_pct,
+            round(avg(f.avg_cost_usd), 2)               AS avg_cost_usd,
+            round(avg(f.avg_lead_time_days), 2)         AS avg_lead_time_days,
+            round(avg(f.avg_combined_risk_score), 3)    AS avg_risk_score,
+            round(avg(f.route_concentration), 3)        AS avg_route_concentration
+    """
+    
+    # 4.7. INTRA-COMMUNITY OD PAIRS
+    
+    INTRA_COMMUNITY_OD_PAIRS = """
+        MATCH (a:City)-[f:CITY_FLOW]->(b:City)
+        WHERE a.community_id IS NOT NULL
+        AND b.community_id IS NOT NULL
+        AND a.community_id = b.community_id
+        RETURN
+            a.community_id                          AS community_id,
+            a.id                                    AS origin,
+            b.id                                    AS destination,
+            f.orders                                AS orders,
+            f.routes_used                           AS routes_used,
+            round(f.delay_rate_pct, 2)              AS delay_rate_pct,
+            round(f.avg_cost_usd, 2)               AS avg_cost_usd,
+            round(f.route_concentration, 3)         AS route_concentration
+        ORDER BY community_id, orders DESC
+    """
 
     # EXECUTION HELPERS
 
@@ -165,6 +203,14 @@ class Block4Queries:
     @staticmethod
     def inter_community_flows(driver) -> pd.DataFrame:
         return run_query(driver, Block4Queries.INTER_COMMUNITY_FLOWS)
+    
+    @staticmethod
+    def intra_community_summary(driver) -> pd.DataFrame:
+        return run_query(driver, Block4Queries.INTRA_COMMUNITY_SUMMARY)
+    
+    @staticmethod
+    def intra_community_od_pairs(driver) -> pd.DataFrame:
+        return run_query(driver, Block4Queries.INTRA_COMMUNITY_OD_PAIRS)
 
     @staticmethod
     def write_all(driver) -> pd.DataFrame:
@@ -175,8 +221,10 @@ class Block4Queries:
     def run_all(driver) -> dict:
         """Read all Block 4 data (assumes write_all has been called)."""
         return {
-            "city_flow_exposure":   Block4Queries.city_flow_exposure(driver),
-            "country_flow_exposure": Block4Queries.country_flow_exposure(driver),
-            "communities_by_city":  Block4Queries.communities_by_city(driver),
-            "inter_community_flows": Block4Queries.inter_community_flows(driver),
+            "city_flow_exposure":       Block4Queries.city_flow_exposure(driver),
+            "country_flow_exposure":    Block4Queries.country_flow_exposure(driver),
+            "communities_by_city":      Block4Queries.communities_by_city(driver),
+            "inter_community_flows":    Block4Queries.inter_community_flows(driver),
+            "intra_community_summary":  Block4Queries.intra_community_summary(driver),
+            "intra_community_od_pairs": Block4Queries.intra_community_od_pairs(driver),
         }

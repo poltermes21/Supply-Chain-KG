@@ -129,6 +129,14 @@ h1, h2, h3 {
 .kpi-orange { border-left-color: #F59E0B; }
 .kpi-blue   { border-left-color: #3B82F6; }
 
+.kpi-percent {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #9CA3AF;
+    opacity: 0.75;
+    margin-left: 0.25rem;
+}
+
 .kpi-label {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.62rem;
@@ -219,6 +227,8 @@ df_temporal["date"] = pd.to_datetime(
 )
 
 palette_prod = px.colors.qualitative.Safe
+profile_labels = ["Single route", "Highly concentrated", "Moderately concentrated", "Well diversified"]
+profile_colors = ["#EF4444", "#F59E0B", "#3B82F6", "#10B981"]
 
 
 # SECTION 1 - KPIs baseline
@@ -692,20 +702,67 @@ def _parse_route_share(val):
 df_od["_route_share"] = df_od["route_share"].apply(_parse_route_share)
 
 # KPI strip
+# KPI strip
 single   = (df_od["redundancy_profile"] == "single_route").sum()
 high_con = (df_od["redundancy_profile"] == "highly_concentrated").sum()
 mod_con  = (df_od["redundancy_profile"] == "moderately_concentrated").sum()
 diversif = (df_od["redundancy_profile"] == "well_diversified").sum()
 avg_conc = df_od["route_concentration"].mean()
 
+total_lanes = len(df_od)
+
+# Percentages
+single_pct   = single / total_lanes * 100
+high_pct     = high_con / total_lanes * 100
+mod_pct      = mod_con / total_lanes * 100
+diversif_pct = diversif / total_lanes * 100
+
 k1, k2, k3, k4, k5 = st.columns(5)
 
 kpi_od_data = [
-    (k1, "Single-Route Lanes",      f"{single}",        "No alternative routing","kpi-alert"),
-    (k2, "Highly Concentrated",     f"{high_con}",      "Main route >70% of orders","kpi-orange"),
-    (k3, "Moderately Concentrated", f"{mod_con}",       "Main route 40–70% of orders","kpi-blue"),
-    (k4, "Well Diversified",        f"{diversif}",      "Route concentration <40%","kpi-ok"),
-    (k5, "Avg Route Concentration", f"{avg_conc:.2f}",  "Herfindahl-style index","kpi-neutral"),
+    (
+        k1,
+        "Single-Route Lanes",
+        f"""{single}
+        <span class="kpi-percent">{single_pct:.1f}%</span>
+        """,
+        "No alternative routing",
+        "kpi-alert"
+    ),
+    (
+        k2,
+        "Highly Concentrated",
+        f"""{high_con}
+        <span class="kpi-percent">{high_pct:.1f}%</span>
+        """,
+        "Main route >70% of orders",
+        "kpi-orange"
+    ),
+    (
+        k3,
+        "Moderately Concentrated",
+        f"""{mod_con}
+        <span class="kpi-percent">{mod_pct:.1f}%</span>
+        """,
+        "Main route 40–70% of orders",
+        "kpi-blue"
+    ),
+    (
+        k4,
+        "Well Diversified",
+        f"""{diversif}
+        <span class="kpi-percent">{diversif_pct:.1f}%</span>
+        """,
+        "Route concentration <40%",
+        "kpi-ok"
+    ),
+    (
+        k5,
+        "Avg Route Concentration",
+        f"{avg_conc:.2f}",
+        "Herfindahl-style index",
+        "kpi-neutral"
+    ),
 ]
 
 for col, label, value, sub, css_class in kpi_od_data:
@@ -715,7 +772,8 @@ for col, label, value, sub, css_class in kpi_od_data:
             <div class="kpi-label">{label}</div>
             <div class="kpi-value">{value}</div>
             <div class="kpi-sub">{sub}</div>
-        </div>""", unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("")
 
@@ -730,7 +788,7 @@ metric_options = {
 selected_metric_label = st.selectbox("Heatmap metric", list(metric_options.keys()), index=0)
 selected_metric = metric_options[selected_metric_label]
 
-col_heat, col_right = st.columns([3, 1])
+col_heat = st.container()
 
 # Heatmap
 with col_heat:
@@ -768,42 +826,6 @@ with col_heat:
         margin=dict(l=10, r=10, t=10, b=10),
     )
     st.plotly_chart(fig_heat, use_container_width=True)
-
-# Right column: redundancy profile + top-risk lanes
-with col_right:
-    # Redundancy profile donut
-    st.markdown('<div class="section-label">Redundancy profile</div>', unsafe_allow_html=True)
-    profile_order  = ["single_route", "highly_concentrated", "moderately_concentrated", "well_diversified"]
-    profile_labels = ["Single route", "Highly concentrated", "Moderately concentrated", "Well diversified"]
-    profile_colors = ["#EF4444", "#F59E0B", "#3B82F6", "#10B981"]
-
-    counts = df_od["redundancy_profile"].value_counts()
-    vals   = [counts.get(p, 0) for p in profile_order]
-
-    fig_donut = go.Figure(go.Pie(
-        labels=profile_labels,
-        values=vals,
-        hole=0.58,
-        marker=dict(colors=profile_colors, line=dict(color="#0F1117", width=2)),
-        textinfo="percent",
-        textposition="outside",
-        textfont=dict(size=9, family=FONT_MONO, color="#FFFFFF"),
-        hovertemplate="<b>%{label}</b><br>Lanes: %{value}<br>Share: %{percent}<extra></extra>",
-    ))
-    fig_donut.update_layout(                          
-        **base_layout(height=300),
-        showlegend=True,
-        legend=dict(
-            orientation="h",                          
-            x=0.5,                                   
-            y=-0.15,                                  
-            xanchor="center",
-            yanchor="top",
-            font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1),
-        ),
-        margin=dict(l=10, r=10, t=10, b=80),
-    )
-    st.plotly_chart(fig_donut, use_container_width=True)
 
 # Route share distribution scatter
 st.markdown('<div class="section-label">Route concentration vs delay rate — bubble = orders volume</div>', unsafe_allow_html=True)

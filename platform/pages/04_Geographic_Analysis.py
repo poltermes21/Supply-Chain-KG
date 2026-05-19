@@ -174,11 +174,13 @@ def load_block4_data():
 with st.spinner("Running Louvain community detection..."):
     data = load_block4_data()
 
-df_city      = data.get("city_flow_exposure", pd.DataFrame())
-df_country   = data.get("country_flow_exposure", pd.DataFrame())
-df_louvain   = data.get("louvain_write_stats", pd.DataFrame())
-df_comm      = data.get("communities_by_city", pd.DataFrame())
-df_inter     = data.get("inter_community_flows", pd.DataFrame())
+df_city             = data.get("city_flow_exposure", pd.DataFrame())
+df_country          = data.get("country_flow_exposure", pd.DataFrame())
+df_louvain          = data.get("louvain_write_stats", pd.DataFrame())
+df_comm             = data.get("communities_by_city", pd.DataFrame())
+df_inter            = data.get("inter_community_flows", pd.DataFrame())
+df_intra_summary    = data.get("intra_community_summary", pd.DataFrame())
+df_intra_od_pairs   = data.get("intra_community_od_pairs", pd.DataFrame())
 
 
 # PREPROCESS
@@ -615,3 +617,118 @@ if not df_inter.empty:
     )
 else:
     st.info("No inter-community flow data available.")
+    
+    
+# SECTION 4 - Intra-Community Analysis
+
+st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
+st.markdown('<div class="section-title">4 · Intra-community analysis</div>', unsafe_allow_html=True)
+st.markdown(
+    "Internal cohesion, risk profile and OD pairs within each logistics cluster. "
+    "Select a community to inspect its structure and resilience indicators."
+)
+
+if df_intra_summary.empty or df_intra_od_pairs.empty:
+    st.info("No intra-community data available.")
+else:
+    # Community selector
+    community_options = sorted(df_intra_summary["community_id"].unique())
+
+    sel_col, _ = st.columns([1, 3])
+    with sel_col:
+        selected_community = st.selectbox(
+            "Select community",
+            options=community_options,
+            format_func=lambda x: f"Community {x}",
+            label_visibility="visible",
+        )
+
+    comm_color = comm_color_map.get(selected_community, "#6B7280")
+
+    # KPIs
+    row_kpi = df_intra_summary[df_intra_summary["community_id"] == selected_community].iloc[0]
+
+    st.markdown("")
+    st.markdown(
+        f'<div class="section-label" style="color:{comm_color}">Community {selected_community} — key indicators</div>',
+        unsafe_allow_html=True,
+    )
+
+    k1, k2, k3, k4= st.columns(4)
+
+    def kpi_card(col, label, value, color, hint=""):
+        col.markdown(
+            f"""
+            <div class="kpi-mini" style="border-left-color:{color}">
+                <div class="kpi-mini-label">{label}</div>
+                <div class="kpi-mini-value">{value}</div>
+                {"<div style='font-family:IBM Plex Mono,monospace;font-size:0.58rem;color:#6B7280;margin-top:0.2rem'>" + hint + "</div>" if hint else ""}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    delay_rate   = row_kpi.get("avg_delay_rate_pct", 0)
+    disrupt_rate = row_kpi.get("avg_disrupted_rate_pct", 0)
+    risk_score   = row_kpi.get("avg_risk_score", 0)
+    route_conc   = row_kpi.get("avg_route_concentration", 0)
+
+    # Dynamic colour thresholds
+    delay_color   = "#EF4444" if delay_rate > 40 else "#F59E0B" if delay_rate > 20 else "#10B981"
+    disrupt_color = "#EF4444" if disrupt_rate > 40 else "#F59E0B" if disrupt_rate > 20 else "#10B981"
+    risk_color    = "#EF4444" if risk_score > 0.6 else "#F59E0B" if risk_score > 0.3 else "#10B981"
+    conc_color    = "#EF4444" if route_conc > 0.7 else "#F59E0B" if route_conc > 0.4 else "#10B981"
+
+    kpi_card(k1, "Delay rate",          f"{delay_rate:.1f}%",     delay_color,   "% delayed orders")
+    kpi_card(k2, "Disruption rate",     f"{disrupt_rate:.1f}%",   disrupt_color, "% disrupted orders")
+    kpi_card(k3, "Avg risk score",      f"{risk_score:.3f}",      risk_color,    "risk — 1 = critical")
+    kpi_card(k4, "Route concentration", f"{route_conc:.3f}",      conc_color,    "HHI — 1 = single route")
+
+    # OD pairs table
+    st.markdown("")
+    st.markdown(
+        f'<div class="section-label" style="color:{comm_color}">Internal OD pairs</div>',
+        unsafe_allow_html=True,
+    )
+
+    df_od = df_intra_od_pairs[df_intra_od_pairs["community_id"] == selected_community].copy()
+    df_od = df_od.drop(columns=["community_id"], errors="ignore")
+
+    if "routes_used" in df_od.columns:
+        df_od["routes_used"] = df_od["routes_used"].apply(
+            lambda x: ", ".join(x) if isinstance(x, list) else str(x)
+        )
+
+    df_od_display = df_od.rename(columns={
+        "origin":             "Origin",
+        "destination":        "Destination",
+        "orders":             "Orders",
+        "routes_used":        "Routes used",
+        "delay_rate_pct":     "Delay rate %",
+        "avg_cost_usd":       "Avg cost (USD)",
+        "route_concentration":"Route conc.",
+    })
+
+    st.dataframe(
+        df_od_display,
+        hide_index=True,
+        use_container_width=True,
+        height=min(38 * len(df_od_display) + 40, 420),
+        column_config={
+            "Orders": st.column_config.NumberColumn("Orders", format="%d"),
+            "Delay rate %": st.column_config.ProgressColumn(
+                "Delay rate %", min_value=0, max_value=100, format="%.1f%%"
+            ),
+            "Avg cost (USD)": st.column_config.NumberColumn(
+                "Avg cost (USD)", format="$%.0f"
+            ),
+            "Route conc.": st.column_config.ProgressColumn(
+                "Route conc.", min_value=0, max_value=1, format="%.3f"
+            ),
+        },
+    )
+
+    st.caption(
+        "Route concentration (HHI): 1.0 = single route dependency · "
+        "Delay rate: % of orders arriving late within this OD pair."
+    )
