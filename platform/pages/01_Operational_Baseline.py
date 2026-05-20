@@ -4,8 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 import json as _json
-from shared.connection import get_neo4j_driver
-from analysis.queriesv2 import Block1Queries
+from shared.analysis_store import load_block_data
 
 st.set_page_config(page_title="Operational Baseline", layout="wide")
 
@@ -204,12 +203,9 @@ st.markdown(
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-# DATA LOADING
-driver = get_neo4j_driver()
-
 @st.cache_data(ttl=600)
 def load_block1_data():
-    return Block1Queries.run_all(driver)
+    return load_block_data("block1_operational")
 
 with st.spinner("Loading graph data..."):
     data = load_block1_data()

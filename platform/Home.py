@@ -1,6 +1,5 @@
 import streamlit as st
-from shared.connection import get_neo4j_driver
-from analysis.queriesv2 import Block1Queries
+from shared.analysis_store import load_query_data
 
 # 1. Page Configuration
 st.set_page_config(
@@ -8,9 +7,6 @@ st.set_page_config(
     page_icon="🌐",
     layout="wide"
 )
-
-# 2. Initialize the Neo4j Driver
-driver = get_neo4j_driver()
 
 # 3. Hero Section (Landing Page Header)
 st.title("Knowledge Graph-Based Supply Chain Architecture")
@@ -28,8 +24,7 @@ st.header("Global Network Health")
 
 # We wrap the data fetching in a spinner for better UX
 with st.spinner("Fetching operational baseline..."):
-    # Executing the global KPIs query from your Block1Queries class
-    kpi_data = Block1Queries.global_baseline_kpis(driver)
+    kpi_data = load_query_data("block1_operational", "global_baseline_kpis")
 
 if not kpi_data.empty:
     # Extract the first row of data

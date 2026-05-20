@@ -2,8 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-from shared.connection import get_neo4j_driver
-from analysis.queriesv2 import Block4Queries
+from shared.analysis_store import load_block_data
 
 st.set_page_config(page_title="Geographic Analysis", layout="wide")
 
@@ -164,12 +163,9 @@ st.markdown(
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-# DATA LOADING
-driver = get_neo4j_driver()
-
 @st.cache_data(ttl=3600)
 def load_block4_data():
-    return Block4Queries.run_all(driver)
+    return load_block_data("block4_geography")
 
 with st.spinner("Running Louvain community detection..."):
     data = load_block4_data()

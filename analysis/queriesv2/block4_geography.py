@@ -191,7 +191,7 @@ class Block4Queries:
         """Project → write community_id to City nodes → drop projection."""
         with driver.session() as session:
             Block4Queries._drop_and_project(session)
-            result = session.run(Block4Queries.LOUVAIN_WRITE)
+            result = session.run(Block4Queries.LOUVAIN_CITY_WRITE)
             df = pd.DataFrame([record.data() for record in result])
             Block4Queries._drop(session)
         return df
