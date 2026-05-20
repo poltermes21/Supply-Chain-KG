@@ -207,9 +207,10 @@ marimo/_lsp/
 __marimo__/
 
 
-# CSV and json Files
+# CSV, json, parquet Files
 *.csv
 *.json
+*.parquet
 
 # Streamlit
 secrets.toml

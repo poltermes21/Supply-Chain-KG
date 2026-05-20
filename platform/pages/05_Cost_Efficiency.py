@@ -3,9 +3,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
-from shared.connection import get_neo4j_driver
-from analysis.queriesv2.block5_costs import Block5Queries
-import plotly.express as px
+from shared.analysis_store import load_block_data
 
 st.set_page_config(page_title="Cost & Mitigation Efficiency", layout="wide")
 
@@ -187,12 +185,9 @@ st.markdown(
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-# DATA LOADING
-driver = get_neo4j_driver()
-
 @st.cache_data(ttl=3600)
 def load_block5_data():
-    return Block5Queries.run_all(driver)
+    return load_block_data("block5_costs")
 
 with st.spinner("Loading cost and mitigation data..."):
     data = load_block5_data()

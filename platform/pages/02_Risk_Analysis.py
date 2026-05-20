@@ -4,6 +4,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
 from shared.connection import get_neo4j_driver
+from shared.analysis_store import load_block_data
 from analysis.queriesv2 import Block2Queries
 
 st.set_page_config(page_title="Risk Analysis", layout="wide")
@@ -188,18 +189,21 @@ geo_thresh     = st.sidebar.slider("Geopolitical Risk ≥", 0.0, 1.0, 0.6, 0.05)
 weather_thresh = st.sidebar.slider("Weather Severity ≥",  0.0, 1.0, 0.6, 0.05)
 
 @st.cache_data(ttl=600)
-def load_block2_data(g, w):
-    return Block2Queries.run_risk_pack(driver, geo_threshold=g, weather_threshold=w)
+def load_block2_static_data():
+    return load_block_data("block2_risk")
 
-with st.spinner("Calculating risk correlations..."):
-    data = load_block2_data(geo_thresh, weather_thresh)
+@st.cache_data(ttl=600)
+def load_joint_risk_data_cached(g, w):
+    return Block2Queries.joint_risk_exposure(driver, geo_threshold=g, weather_threshold=w)
+
+with st.spinner("Loading cached risk analysis..."):
+    data = load_block2_static_data()
 
 df_global   = data["risk_level_global"]
 df_route    = data["risk_exposure_by_route"]
 df_product  = data["risk_exposure_by_product"]
 df_outbound = data["outbound_city_risk_exposure"]
 df_inbound  = data["inbound_city_risk_exposure"]
-df_joint    = data["joint_risk_exposure"]
 df_lanes    = data["critical_lanes_by_risk"]
 
 # Normalise risk_level to lowercase for consistent lookup
@@ -591,100 +595,108 @@ with th_col2:
 
 st.markdown("")
 
-if df_joint.empty:
-    st.markdown("""
-    <div class="callout-box">
-        No orders meet both configured risk thresholds simultaneously.
-    </div>""", unsafe_allow_html=True)
-else:
-    total_affected = int(df_joint["total_orders"].sum())
-    avg_delay_joint = df_joint["avg_delay_days"].mean()
-    n_routes = len(df_joint)
+joint_notice = st.empty()
 
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.markdown(f"""
-        <div style="background:#1E0F0F;border:1px solid #2A2D3A;border-left:3px solid #EF4444;
-                    border-radius:8px;padding:0.8rem 1rem;">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
-                        text-transform:uppercase;letter-spacing:0.1em;color:#6B7280">
-                Affected orders
-            </div>
-            <div style="font-size:1.5rem;font-weight:700;color:#EF4444;
-                        font-family:'IBM Plex Sans',sans-serif">{total_affected:,}</div>
+with st.spinner("Loading joint exposure..."):
+    try:
+        joint_ready = load_joint_risk_data_cached(geo_thresh, weather_thresh)
+    except Exception as exc:
+        joint_notice.error(f"Joint exposure could not be loaded: {exc}")
+        joint_ready = None
+
+if joint_ready is not None:
+    if joint_ready.empty:
+        st.markdown("""
+        <div class="callout-box">
+            No orders meet both configured risk thresholds simultaneously.
         </div>""", unsafe_allow_html=True)
-    with m2:
-        st.markdown(f"""
-        <div style="background:#1A1D27;border:1px solid #2A2D3A;border-left:3px solid #F59E0B;
-                    border-radius:8px;padding:0.8rem 1rem;">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
-                        text-transform:uppercase;letter-spacing:0.1em;color:#6B7280">
-                Exposed Routes
-            </div>
-            <div style="font-size:1.5rem;font-weight:700;color:#F59E0B;
-                        font-family:'IBM Plex Sans',sans-serif">{n_routes}</div>
-        </div>""", unsafe_allow_html=True)
-    with m3:
-        st.markdown(f"""
-        <div style="background:#1A1D27;border:1px solid #2A2D3A;border-left:3px solid #6B7280;
-                    border-radius:8px;padding:0.8rem 1rem;">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
-                        text-transform:uppercase;letter-spacing:0.1em;color:#6B7280">
-                Avg delay days
-            </div>
-            <div style="font-size:1.5rem;font-weight:700;color:#E5E7EB;
-                        font-family:'IBM Plex Sans',sans-serif">{avg_delay_joint:.2f}d</div>
-        </div>""", unsafe_allow_html=True)
+    else:
+        total_affected = int(joint_ready["total_orders"].sum())
+        avg_delay_joint = joint_ready["avg_delay_days"].mean()
+        n_routes = len(joint_ready)
 
-    st.markdown("")
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.markdown(f"""
+            <div style="background:#1E0F0F;border:1px solid #2A2D3A;border-left:3px solid #EF4444;
+                        border-radius:8px;padding:0.8rem 1rem;">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
+                            text-transform:uppercase;letter-spacing:0.1em;color:#6B7280">
+                    Affected orders
+                </div>
+                <div style="font-size:1.5rem;font-weight:700;color:#EF4444;
+                            font-family:'IBM Plex Sans',sans-serif">{total_affected:,}</div>
+            </div>""", unsafe_allow_html=True)
+        with m2:
+            st.markdown(f"""
+            <div style="background:#1A1D27;border:1px solid #2A2D3A;border-left:3px solid #F59E0B;
+                        border-radius:8px;padding:0.8rem 1rem;">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
+                            text-transform:uppercase;letter-spacing:0.1em;color:#6B7280">
+                    Exposed Routes
+                </div>
+                <div style="font-size:1.5rem;font-weight:700;color:#F59E0B;
+                            font-family:'IBM Plex Sans',sans-serif">{n_routes}</div>
+            </div>""", unsafe_allow_html=True)
+        with m3:
+            st.markdown(f"""
+            <div style="background:#1A1D27;border:1px solid #2A2D3A;border-left:3px solid #6B7280;
+                        border-radius:8px;padding:0.8rem 1rem;">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:0.6rem;
+                            text-transform:uppercase;letter-spacing:0.1em;color:#6B7280">
+                    Avg delay days
+                </div>
+                <div style="font-size:1.5rem;font-weight:700;color:#E5E7EB;
+                            font-family:'IBM Plex Sans',sans-serif">{avg_delay_joint:.2f}d</div>
+            </div>""", unsafe_allow_html=True)
 
-    # Bar chart: routes by volume, color = avg_combined_risk_score
-    df_joint_sorted = df_joint.sort_values("total_orders", ascending=True)
+        st.markdown("")
 
-    fig_joint = go.Figure(go.Bar(
-        x=df_joint_sorted["total_orders"],
-        y=df_joint_sorted["route"],
-        orientation="h",
-        marker=dict(
-            color=df_joint_sorted["avg_combined_risk_score"],
-            colorscale="RdYlGn_r",
-            colorbar=dict(
-                title=dict(text="Combined Risk Score", font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR)),
-                tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR),
-                thickness=12,
-                x=1.02,
-                xpad=10
+        df_joint_sorted = joint_ready.sort_values("total_orders", ascending=True)
+
+        fig_joint = go.Figure(go.Bar(
+            x=df_joint_sorted["total_orders"],
+            y=df_joint_sorted["route"],
+            orientation="h",
+            marker=dict(
+                color=df_joint_sorted["avg_combined_risk_score"],
+                colorscale="RdYlGn_r",
+                colorbar=dict(
+                    title=dict(text="Combined Risk Score", font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR)),
+                    tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR),
+                    thickness=12,
+                    x=1.02,
+                    xpad=10
+                ),
+                showscale=True,
             ),
-            showscale=True,
-        ),
-        text=[
-            f"{int(v):,} orders · {r:.1f}% disrupt · {d:.1f}d delay"
-            for v, r, d in zip(
-                df_joint_sorted["total_orders"],
-                df_joint_sorted["disruption_rate_pct"],
-                df_joint_sorted["avg_delay_days"],
-            )
-        ],
-        textposition="none",
-        textfont=dict(size=9, family=FONT_MONO, color=TEXT_COLOR),
-        hovertemplate=(
-            "<b>%{y}</b><br>"
-            "Orders: %{x:,}<br>"
-            "Disruption: %{customdata[0]:.1f}%<br>"
-            "Delay Rate: %{customdata[1]:.1f}%<br>"
-            "Avg Delay: %{customdata[2]:.2f}d<extra></extra>"
-            
-        ),
-        customdata=df_joint_sorted[["disruption_rate_pct", "delay_rate_pct", "avg_delay_days"]].values,
-    ))
-    fig_joint.update_layout(
-        **base_layout(height=max(220, len(df_joint) * 55)),
-        xaxis=styled_xaxis(title="Total Orders"),
-        yaxis=styled_yaxis(showgrid=False),
-        margin=dict(l=12, r=120, t=12, b=12),
-    )
-    st.plotly_chart(fig_joint, use_container_width=True)
-    st.caption("Routes with simultaneous exposure to geopolitical and weather risk above the threshold. Color = combined risk score (red = higher).")
+            text=[
+                f"{int(v):,} orders · {r:.1f}% disrupt · {d:.1f}d delay"
+                for v, r, d in zip(
+                    df_joint_sorted["total_orders"],
+                    df_joint_sorted["disruption_rate_pct"],
+                    df_joint_sorted["avg_delay_days"],
+                )
+            ],
+            textposition="none",
+            textfont=dict(size=9, family=FONT_MONO, color=TEXT_COLOR),
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Orders: %{x:,}<br>"
+                "Disruption: %{customdata[0]:.1f}%<br>"
+                "Delay Rate: %{customdata[1]:.1f}%<br>"
+                "Avg Delay: %{customdata[2]:.2f}d<extra></extra>"
+            ),
+            customdata=df_joint_sorted[["disruption_rate_pct", "delay_rate_pct", "avg_delay_days"]].values,
+        ))
+        fig_joint.update_layout(
+            **base_layout(height=max(220, len(joint_ready) * 55)),
+            xaxis=styled_xaxis(title="Total Orders"),
+            yaxis=styled_yaxis(showgrid=False),
+            margin=dict(l=12, r=120, t=12, b=12),
+        )
+        st.plotly_chart(fig_joint, use_container_width=True)
+        st.caption("Routes with simultaneous exposure to geopolitical and weather risk above the threshold. Color = combined risk score (red = higher).")
 
 
 # SECTION 5 - Critical Lanes
