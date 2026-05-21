@@ -168,7 +168,19 @@ def load_block4_data():
     return load_block_data("block4_geography")
 
 with st.spinner("Running Louvain community detection..."):
-    data = load_block4_data()
+    try:
+        data = load_block4_data()
+    except FileNotFoundError:
+        st.info(
+            "No analysis data is available for Geographic Analysis. "
+        )
+        data = {}
+    except Exception:
+        st.warning(
+            "Geographic Analysis is currently unavailable. "
+            "The page will be displayed in an empty state."
+        )
+        data = {}
 
 df_city             = data.get("city_flow_exposure", pd.DataFrame())
 df_country          = data.get("country_flow_exposure", pd.DataFrame())
@@ -665,7 +677,7 @@ else:
         )
 
     delay_rate   = row_kpi.get("avg_delay_rate_pct", 0)
-    disrupt_rate = row_kpi.get("avg_disrupted_rate_pct", 0)
+    disrupt_rate = row_kpi.get("avg_disruption_rate_pct", 0)
     risk_score   = row_kpi.get("avg_risk_score", 0)
     route_conc   = row_kpi.get("avg_route_concentration", 0)
 
@@ -696,32 +708,35 @@ else:
         )
 
     df_od_display = df_od.rename(columns={
-        "origin":             "Origin",
-        "destination":        "Destination",
-        "orders":             "Orders",
-        "routes_used":        "Routes used",
-        "delay_rate_pct":     "Delay rate %",
-        "avg_cost_usd":       "Avg cost (USD)",
-        "route_concentration":"Route conc.",
+        "origin":               "Origin",
+        "destination":          "Destination",
+        "orders":               "Orders",
+        "routes_used":          "Routes used",
+        "delay_rate_pct":       "Delay rate %",
+        "disruption_rate_pct":  "Disruption rate %",
+        "route_concentration":  "Route concentration",
     })
 
-    st.dataframe(
-        df_od_display,
-        hide_index=True,
-        use_container_width=True,
-        height=min(38 * len(df_od_display) + 40, 420),
-        column_config={
-            "Orders": st.column_config.NumberColumn("Orders", format="%d"),
-            "Delay rate %": st.column_config.ProgressColumn(
-                "Delay rate %", min_value=0, max_value=100, format="%.1f%%"
-            ),
-            "Avg cost (USD)": st.column_config.NumberColumn(
-                "Avg cost (USD)", format="$%.0f"
-            ),
-            "Route conc.": st.column_config.ProgressColumn(
-                "Route conc.", min_value=0, max_value=1, format="%.3f"
-            ),
-        },
+    if df_od_display.empty:
+        st.info("No OD pairs available for this community.")
+    else:
+        st.dataframe(
+            df_od_display,
+            hide_index=True,
+            use_container_width=True,
+            height=min(34 * (len(df_od_display) + 1) + 10, 420),
+            column_config={
+                "Orders": st.column_config.NumberColumn("Orders", format="%d"),
+                "Delay rate %": st.column_config.ProgressColumn(
+                    "Delay rate %", min_value=0, max_value=100, format="%.1f%%"
+                ),
+                "Disruption rate %": st.column_config.ProgressColumn(
+                    "Disruption rate %", min_value=0, max_value=100, format="%.1f%%"
+                ),
+                "Route concentration": st.column_config.ProgressColumn(
+                    "Route concentration", min_value=0, max_value=1, format="%.3f"
+                ),
+            },
     )
 
     st.caption(

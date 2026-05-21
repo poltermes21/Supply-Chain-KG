@@ -537,7 +537,7 @@ class KGExtractor:
                 'avg_delay_days': round(float(group['Delay_Days'].mean()), 2),
 
                 'delay_rate_pct': round(float(group['is_delayed'].mean() * 100), 2),
-                'disrupted_rate_pct': round(float(group['is_disrupted'].mean() * 100), 2),
+                'disruption_rate_pct': round(float(group['is_disrupted'].mean() * 100), 2),
                 'avg_combined_risk_score': round(float(group['combined_risk_score'].mean()), 4),
             })
 

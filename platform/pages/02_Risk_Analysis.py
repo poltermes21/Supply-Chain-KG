@@ -182,22 +182,35 @@ st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
 # DATA LOADING
 driver = get_neo4j_driver()
+joint_exposure_unavailable = st.session_state.get("joint_exposure_unavailable", False)
 
 # Joint risk sliders
 st.sidebar.markdown("### Joint Risk Thresholds")
-geo_thresh     = st.sidebar.slider("Geopolitical Risk ≥", 0.0, 1.0, 0.6, 0.05)
-weather_thresh = st.sidebar.slider("Weather Severity ≥",  0.0, 1.0, 0.6, 0.05)
+geo_thresh     = st.sidebar.slider("Geopolitical Risk ≥", 0.0, 1.0, 0.6, 0.05, disabled=joint_exposure_unavailable)
+weather_thresh = st.sidebar.slider("Weather Severity ≥",  0.0, 1.0, 0.6, 0.05, disabled=joint_exposure_unavailable)
 
 @st.cache_data(ttl=600)
 def load_block2_static_data():
     return load_block_data("block2_risk")
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600, show_spinner=False)
 def load_joint_risk_data_cached(g, w):
     return Block2Queries.joint_risk_exposure(driver, geo_threshold=g, weather_threshold=w)
 
 with st.spinner("Loading cached risk analysis..."):
-    data = load_block2_static_data()
+    try:
+        data = load_block2_static_data()
+    except FileNotFoundError:
+        st.info(
+            "No analysis data is available for Risk Analysis."
+        )
+        st.stop()
+    except Exception:
+        st.warning(
+            "Risk Analysis is currently unavailable. "
+            "The page cannot render without the cached analysis outputs."
+        )
+        st.stop()
 
 df_global   = data["risk_level_global"]
 df_route    = data["risk_exposure_by_route"]
@@ -597,12 +610,29 @@ st.markdown("")
 
 joint_notice = st.empty()
 
-with st.spinner("Loading joint exposure..."):
-    try:
-        joint_ready = load_joint_risk_data_cached(geo_thresh, weather_thresh)
-    except Exception as exc:
-        joint_notice.error(f"Joint exposure could not be loaded: {exc}")
-        joint_ready = None
+if joint_exposure_unavailable:
+    joint_notice.warning(
+        "Joint exposure is unavailable because the Neo4j database is not running or cannot be reached. "
+        "The sliders are locked to avoid repeated retries."
+    )
+    joint_ready = None
+else:
+    with st.spinner("Loading joint exposure..."):
+        try:
+            joint_ready = load_joint_risk_data_cached(geo_thresh, weather_thresh)
+        except Exception as exc:
+            error_text = str(exc)
+            if "Couldn't connect" in error_text or "WinError 10061" in error_text or "Connection refused" in error_text:
+                st.session_state["joint_exposure_unavailable"] = True
+                joint_notice.warning(
+                    "Joint exposure is unavailable because the Neo4j database is not running or cannot be reached. "
+                    "The sliders are locked to avoid repeated retries."
+                )
+            else:
+                joint_notice.warning(
+                    "Joint exposure is temporarily unavailable. The rest of the page still loads normally."
+                )
+            joint_ready = None
 
 if joint_ready is not None:
     if joint_ready.empty:
@@ -709,7 +739,7 @@ ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1, 2, 2])
 
 metric_labels = {
     "orders": "Volume",
-    "disrupted_rate_pct": "Disruption rate",
+    "disruption_rate_pct": "Disruption rate",
     "delay_rate_pct": "Delay rate",
     "avg_combined_risk_score": "Risk score"
 }
@@ -800,11 +830,11 @@ labels = [
 
 # Quadrant reference lines
 avg_risk_lanes = df_lanes["avg_combined_risk_score"].mean()
-avg_disr_lanes = df_lanes["disrupted_rate_pct"].mean()
+avg_disr_lanes = df_lanes["disruption_rate_pct"].mean()
 
 padding_factor = 0.15
-x_min = df_lanes["disrupted_rate_pct"].min()
-x_max = df_lanes["disrupted_rate_pct"].max()
+x_min = df_lanes["disruption_rate_pct"].min()
+x_max = df_lanes["disruption_rate_pct"].max()
 y_min = df_lanes["avg_combined_risk_score"].min()
 y_max = df_lanes["avg_combined_risk_score"].max()
 x_range = [
@@ -862,7 +892,7 @@ customdata = list(zip(
 
 # Scatter plot
 fig_lanes.add_trace(go.Scatter(
-    x=df_plot["disrupted_rate_pct"],
+    x=df_plot["disruption_rate_pct"],
     y=df_plot["avg_combined_risk_score"],
     mode="markers+text",
     text=labels,

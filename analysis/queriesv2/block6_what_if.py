@@ -45,7 +45,7 @@ class Block6Queries:
                         'avg_lead_time_days',
                         'avg_combined_risk_score',
                         'delay_rate_pct',
-                        'disrupted_rate_pct'
+                        'disruption_rate_pct'
                     ]
                 }
             }

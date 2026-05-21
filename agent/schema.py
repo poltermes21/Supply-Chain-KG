@@ -184,7 +184,7 @@ KG_SCHEMA_PROMPT = """
   - avg_cost_usd            Double       — mean Shipping_Cost_USD per OD pair
   - total_weight_kg         Long         — sum of Order_Weight_Kg per OD pair
   - delay_rate_pct          Double       — percentage of delayed orders (P(is_delayed = true) * 100))
-  - disrupted_rate_pct      Double       — percentage of disrupted orders (P(is_disrupted = true) * 100))
+  - disruption_rate_pct     Double      — percentage of disrupted orders (P(is_disrupted = true) * 100))
   - route_count             Long         — number of unique Route values on this OD pair
   - routes_used             StringArray  — list of route ids used on this OD pair (['CoGH', 'Suez'])
   - route_concentration     Double       — HHI index (0–1), 1 = single route

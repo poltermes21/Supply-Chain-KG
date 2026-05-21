@@ -207,8 +207,20 @@ st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 def load_block1_data():
     return load_block_data("block1_operational")
 
-with st.spinner("Loading graph data..."):
-    data = load_block1_data()
+with st.spinner("Running Louvain community detection..."):
+    try:
+        data = load_block1_data()
+    except FileNotFoundError:
+        st.info(
+            "No analysis data is available for Operational Baseline. "
+        )
+        data = {}
+    except Exception:
+        st.warning(
+            "Operational Baseline is currently unavailable. "
+            "The page will be displayed in an empty state."
+        )
+        data = {}
 
 kpis         = data["global_baseline_kpis"].iloc[0]
 df_route     = data["orders_by_route"]

@@ -27,7 +27,7 @@ class Block4Queries:
                         'avg_lead_time_days',
                         'avg_combined_risk_score',
                         'delay_rate_pct',
-                        'disrupted_rate_pct'
+                        'disruption_rate_pct'
                     ]
                 }
             }
@@ -133,7 +133,7 @@ class Block4Queries:
             count(f)                                    AS internal_links,
             sum(f.orders)                               AS total_orders,
             round(avg(f.delay_rate_pct), 2)             AS avg_delay_rate_pct,
-            round(avg(f.disrupted_rate_pct), 2)         AS avg_disrupted_rate_pct,
+            round(avg(f.disruption_rate_pct), 2)        AS avg_disruption_rate_pct,
             round(avg(f.avg_cost_usd), 2)               AS avg_cost_usd,
             round(avg(f.avg_lead_time_days), 2)         AS avg_lead_time_days,
             round(avg(f.avg_combined_risk_score), 3)    AS avg_risk_score,
@@ -154,7 +154,7 @@ class Block4Queries:
             f.orders                                AS orders,
             f.routes_used                           AS routes_used,
             round(f.delay_rate_pct, 2)              AS delay_rate_pct,
-            round(f.avg_cost_usd, 2)               AS avg_cost_usd,
+            round(f.disruption_rate_pct, 2)         AS disruption_rate_pct,
             round(f.route_concentration, 3)         AS route_concentration
         ORDER BY community_id, orders DESC
     """

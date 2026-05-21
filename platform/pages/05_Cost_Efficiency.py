@@ -190,7 +190,19 @@ def load_block5_data():
     return load_block_data("block5_costs")
 
 with st.spinner("Loading cost and mitigation data..."):
-    data = load_block5_data()
+    try:
+        data = load_block5_data()
+    except FileNotFoundError:
+        st.warning(
+            "No analysis data is available for Cost Analysis & Mitigation Efficiency."
+        )
+        st.stop()
+    except Exception:
+        st.warning(
+            "Cost Analysis & Mitigation Efficiency is currently unavailable. "
+            "The page cannot render without the cached analysis outputs."
+        )
+        st.stop()
 
 df_baseline  = data["disruption_cost_baseline"]
 df_by_type   = data["cost_of_disruption_by_type"]
