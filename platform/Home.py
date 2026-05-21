@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 from shared.analysis_store import load_query_data
 
 # 1. Page Configuration
@@ -24,7 +25,12 @@ st.header("Global Network Health")
 
 # We wrap the data fetching in a spinner for better UX
 with st.spinner("Fetching operational baseline..."):
-    kpi_data = load_query_data("block1_operational", "global_baseline_kpis")
+    try:
+        kpi_data = load_query_data("block1_operational", "global_baseline_kpis")
+    except FileNotFoundError:
+        kpi_data = pd.DataFrame()
+    except Exception:
+        kpi_data = pd.DataFrame()
 
 if not kpi_data.empty:
     # Extract the first row of data

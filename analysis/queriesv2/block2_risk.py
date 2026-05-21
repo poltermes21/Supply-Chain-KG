@@ -157,9 +157,9 @@ class Block2Queries:
             dest.id AS destination,
             f.orders AS orders,
             round(f.avg_combined_risk_score, 4) AS avg_combined_risk_score,
-            round(f.disrupted_rate_pct, 2) AS disrupted_rate_pct,
+            round(f.disruption_rate_pct, 2) AS disruption_rate_pct,
             round(f.delay_rate_pct, 2) AS delay_rate_pct
-        ORDER BY avg_combined_risk_score DESC, disrupted_rate_pct DESC, orders DESC
+        ORDER BY avg_combined_risk_score DESC, disruption_rate_pct DESC, orders DESC
     """
 
     # EXECUTION METHODS
