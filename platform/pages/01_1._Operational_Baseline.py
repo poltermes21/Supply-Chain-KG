@@ -5,6 +5,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import json as _json
 from shared.analysis_store import load_block_data
+from shared.ui_helpers import render_section_header
 
 st.set_page_config(page_title="Operational Baseline", layout="wide")
 
@@ -241,7 +242,7 @@ profile_colors = ["#EF4444", "#F59E0B", "#3B82F6", "#10B981"]
 
 # SECTION 1 - KPIs baseline
 
-st.markdown('<div class="section-title">1 · KPIs baseline</div>', unsafe_allow_html=True)
+render_section_header("1 · KPIs baseline")
 
 col_v, col_r = st.columns(2)
 
@@ -439,7 +440,7 @@ if len(df_mode) >= 2:
 # SECTION 2 - Traffic distribution
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · Traffic distribution</div>', unsafe_allow_html=True)
+render_section_header("2 · Traffic distribution")
 
 col_left, col_right = st.columns([5, 3])
 
@@ -560,7 +561,7 @@ st.plotly_chart(fig_stacked, use_container_width=True)
 # SECTION 3 - Operational Risk
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">3 · Operational Risk</div>', unsafe_allow_html=True)
+render_section_header("3 · Operational Risk")
 
 col_sev, col_scatter = st.columns([1, 2])
 
@@ -696,7 +697,7 @@ with col_scatter:
 # SECTION 4 - OD Lane Resilience
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">4 · OD Lane Resilience</div>', unsafe_allow_html=True)
+render_section_header("4 · OD Lane Resilience")
 
 # Parse route_share JSON
 def _parse_route_share(val):
@@ -709,7 +710,6 @@ def _parse_route_share(val):
 
 df_od["_route_share"] = df_od["route_share"].apply(_parse_route_share)
 
-# KPI strip
 # KPI strip
 single   = (df_od["redundancy_profile"] == "single_route").sum()
 high_con = (df_od["redundancy_profile"] == "highly_concentrated").sum()

@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 import pandas as pd
 from shared.connection import get_neo4j_driver
 from analysis.queriesv2.block6_what_if import Block6Queries
+from shared.ui_helpers import render_section_header
 
 st.set_page_config(page_title="What-If Scenarios", layout="wide")
 
@@ -202,7 +203,7 @@ tab_route, tab_node, tab_path = st.tabs([
 # SECTION 1 - Route Shock
 
 with tab_route:
-    st.markdown('<div class="section-title">Route Shock Simulation</div>', unsafe_allow_html=True)
+    render_section_header("Route Shock Simulation")
 
     # Presets
     st.markdown('<div class="preset-label">Quick Presets</div>', unsafe_allow_html=True)
@@ -510,7 +511,7 @@ with tab_route:
 # SECTION 2 - Node Failure
 
 with tab_node:
-    st.markdown('<div class="section-title">Node Failure Simulation</div>', unsafe_allow_html=True)
+    render_section_header("Node Failure Simulation")
 
     # Presets
     st.markdown('<div class="preset-label">Quick Presets</div>', unsafe_allow_html=True)
@@ -659,7 +660,7 @@ with tab_node:
 # SECTION 3 - Path Optimization
 
 with tab_path:
-    st.markdown('<div class="section-title">Emergency Path Optimization</div>', unsafe_allow_html=True)
+    render_section_header("Emergency Path Optimization")
     st.markdown(
         "Find the optimal path between two network nodes via Dijkstra over the `CITY_FLOW` graph. "
         "Compare all 3 optimization criteria in parallel."
