@@ -4,6 +4,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
 from shared.analysis_store import load_block_data
+from shared.ui_helpers import render_section_header
 
 st.set_page_config(page_title="Cost & Mitigation Efficiency", layout="wide")
 
@@ -229,7 +230,7 @@ COLOR_MAP = {
 
 # SECTION 1 - Baseline economic impact
 
-st.markdown('<div class="section-title">1 · Economic impact of disruptions</div>', unsafe_allow_html=True)
+render_section_header("1 · Economic impact of disruptions")
 
 if not df_baseline.empty:
     disrupted     = df_baseline[df_baseline["is_disrupted"] == True]
@@ -295,7 +296,7 @@ if not df_baseline.empty:
 # SECTION 2 - Disruption cost profile
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · Disruption cost profile</div>', unsafe_allow_html=True)
+render_section_header("2 · Disruption cost profile")
 
 if not df_by_type.empty:
     col_bar, col_radar = st.columns([5, 4])
@@ -438,7 +439,7 @@ with col_radar:
 # SECTION 3 - Global mitigation effectiveness
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">3 · Global mitigation effectiveness</div>', unsafe_allow_html=True)
+render_section_header("3 · Global mitigation effectiveness")
 
 if not df_mit_sum.empty:
     # Cards
@@ -541,7 +542,7 @@ if not df_mit_sum.empty:
 # SECTION 4 - Mitigation by disruption context
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">4 · Mitigation by disruption context</div>', unsafe_allow_html=True)
+render_section_header("4 · Mitigation by disruption type")
 
 if not df_mit_disr.empty:
     disruption_types = sorted(df_mit_disr["disruption_type"].unique())
@@ -558,6 +559,8 @@ if not df_mit_disr.empty:
         card_cols = st.columns(len(df_filt))
         for i, (_, row) in enumerate(df_filt.sort_values("effectiveness_rate_pct", ascending=False).iterrows()):
             color = MITIGATION_COLORS.get(row["mitigation_action"], "#6B7280")
+            cost_vs_baseline = float(row["avg_cost_vs_baseline_pct"])
+            cost_vs_baseline_text = f"+{cost_vs_baseline:.1f}%" if cost_vs_baseline >= 0 else f"{cost_vs_baseline:.1f}%"
             with card_cols[i]:
                 st.markdown(f"""
                 <div class="mit-card" style="border-left-color:{color}">
@@ -573,7 +576,7 @@ if not df_mit_disr.empty:
                         <div class="mit-metric-lbl">Effectiveness</div>
                     </div>
                     <div class="mit-metric">
-                        <div class="mit-metric-val">+{row['avg_cost_vs_baseline_pct']:.1f}%</div>
+                        <div class="mit-metric-val">{cost_vs_baseline_text}</div>
                         <div class="mit-metric-lbl">Cost vs Baseline</div>
                     </div>
                     <div class="mit-metric">
@@ -614,7 +617,7 @@ if not df_mit_disr.empty:
 # SECTION 5 - Full context mitigation
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">5 · Full context mitigation</div>', unsafe_allow_html=True)
+render_section_header("5 · Full context mitigation")
 st.markdown('<div class="section-label">Disruption × Route × Risk level → Heatmap by action mitigation</div>', unsafe_allow_html=True)
 
 LOW_N_THRESHOLD = 5
@@ -767,7 +770,7 @@ if not df_mit_ctx.empty:
 # SECTION 6 - Expedited air usage
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">6 · Expedited air usage</div>', unsafe_allow_html=True)
+render_section_header("6 · Expedited air usage")
 st.markdown('<div class="section-label">% Expedited Air Freight usage by disruption</div>', unsafe_allow_html=True)
 
 if not df_air.empty:
