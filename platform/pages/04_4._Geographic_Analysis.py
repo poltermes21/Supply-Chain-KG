@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 from shared.analysis_store import load_block_data
+from shared.ui_helpers import render_section_header
 
 st.set_page_config(page_title="Geographic Analysis", layout="wide")
 
@@ -217,7 +218,7 @@ if not df_inter.empty:
 
 # SECTION 1 - Flow Exposure
 
-st.markdown('<div class="section-title">1 · Flow exposure per node</div>', unsafe_allow_html=True)
+render_section_header("1 · Flow exposure per node")
 
 toggle_col, _ = st.columns([1, 3])
 with toggle_col:
@@ -300,7 +301,7 @@ if not df_mirror.empty and out_col in df_mirror.columns:
     st.plotly_chart(fig_mirror, use_container_width=True)
 
     if granularity == "Country":
-        with st.expander("📋 Global country market share"):
+        with st.expander("Global country market share"):
             df_share = df_country[["country", "region", "pct_outbound", "pct_inbound"]].copy()
             df_share.columns = ["Country", "Region", "Export %", "Import %"]
             st.dataframe(
@@ -319,7 +320,7 @@ if not df_mirror.empty and out_col in df_mirror.columns:
 # SECTION 2 - Communities
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · Logistics communities</div>', unsafe_allow_html=True)
+render_section_header("2 · Logistics communities")
 
 # KPIs Louvain
 if not df_louvain.empty:
@@ -440,7 +441,7 @@ with col_search:
 # SECTION 3 - Inter-community dependencies
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">3 · Inter-community dependencies</div>', unsafe_allow_html=True)
+render_section_header("3 · Inter-community dependencies")
 
 bridge_lanes = []
 
@@ -630,7 +631,7 @@ else:
 # SECTION 4 - Intra-Community Analysis
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">4 · Intra-community analysis</div>', unsafe_allow_html=True)
+render_section_header("4 · Intra-community analysis")
 st.markdown(
     "Internal cohesion, risk profile and OD pairs within each logistics cluster. "
     "Select a community to inspect its structure and resilience indicators."

@@ -5,6 +5,7 @@ from plotly.subplots import make_subplots
 import pandas as pd
 from shared.connection import get_neo4j_driver
 from shared.analysis_store import load_block_data
+from shared.ui_helpers import render_section_header
 from analysis.queriesv2 import Block2Queries
 
 st.set_page_config(page_title="Risk Analysis", layout="wide")
@@ -228,7 +229,7 @@ for df in [df_global, df_route, df_product]:
 
 # SECTION 1 - Global risk profile
 
-st.markdown('<div class="section-title">1 · Global risk profile</div>', unsafe_allow_html=True)
+render_section_header("1 · Global risk profile")
 
 # Max values for proportional progress bars
 max_disruption = df_global["disruption_rate_pct"].max()
@@ -359,7 +360,7 @@ st.caption("Bars (right axis) show the average risk score per level. Lines (left
 # SECTION 2 - Risk Concentration
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">2 · Risk Concentration</div>', unsafe_allow_html=True)
+render_section_header("2 · Risk Concentration")
 
 tab_route, tab_product = st.tabs(["By Route", "By Product"])
 
@@ -437,7 +438,7 @@ with tab_product:
 # SECTION 3 - Risk by Geographic Node
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">3 · Risk by geographic node</div>', unsafe_allow_html=True)
+render_section_header("3 · Risk by geographic node")
 st.markdown('<div class="section-label">Mirror chart — outbound (left) vs inbound (right) by combined risk score</div>', unsafe_allow_html=True)
 
 all_cities = sorted(
@@ -577,7 +578,7 @@ st.caption(
 # SECTION 4 - Joint Risk Exposure
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">4 · Joint Exposure — risk overlap</div>', unsafe_allow_html=True)
+render_section_header("4 · Joint Exposure — risk overlap")
 
 # Inline threshold display
 th_col1, th_col2, th_col3 = st.columns([1, 1, 3])
@@ -732,7 +733,7 @@ if joint_ready is not None:
 # SECTION 5 - Critical Lanes
 
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">5 · Critical lanes by risk and volume</div>', unsafe_allow_html=True)
+render_section_header("5 · Critical lanes by risk and volume")
 
 # — Controls —
 ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1, 2, 2])
