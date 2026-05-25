@@ -172,36 +172,21 @@ def _build_pyvis_html(df_comm, df_city, df_inter, df_intra_od_pairs,
             physics=True,
         )
 
-    html = net.generate_html(notebook=False)
+    return _apply_pyvis_post_processing(net.generate_html(notebook=False))
 
-    # vis.js only renders HTML in tooltips when `title` is a DOM Element (not a
-    # string). Inject a post-init step that converts every HTML title string
-    # to a DOM element before the network is created, plus CSS to theme the
-    # popup so it matches the dark app palette.
+
+def _apply_pyvis_post_processing(html):
+    """Inject HTML-tooltip support, dark card chrome, auto-fit, and Ctrl/Cmd-scroll
+    zoom into a PyVis HTML string."""
     tooltip_css = """
     <style>
-      /* Strip PyVis's default Bootstrap card chrome so the canvas area is
-         flush with the dark page background — prevents the colored edge
-         lines from leaking against a white border. */
       html, body { background-color: #0F1117 !important; margin: 0; padding: 0; }
-      .card {
-        background-color: #0F1117 !important;
-        border: none !important;
-        box-shadow: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-      .card-body {
-        background-color: #0F1117 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-      }
-      #mynetwork {
-        background-color: #0F1117 !important;
-        overflow: hidden !important;
-        border: none !important;
-      }
-      /* Tooltip styling */
+      .card { background-color: #0F1117 !important; border: none !important;
+              box-shadow: none !important; margin: 0 !important; padding: 0 !important; }
+      .card-body { background-color: #0F1117 !important; padding: 0 !important;
+                   overflow: hidden !important; }
+      #mynetwork { background-color: #0F1117 !important; overflow: hidden !important;
+                   border: none !important; }
       div.vis-tooltip {
         background-color: #1A1D27 !important;
         border: 1px solid #2A2D3A !important;
@@ -218,7 +203,6 @@ def _build_pyvis_html(df_comm, df_city, df_inter, df_intra_od_pairs,
     </style>
     """
     tooltip_js = """
-        // Convert HTML string titles to DOM elements (vis.js needs this to render HTML)
         function _htmlTitle(text) {
           if (typeof text === 'string' && text.indexOf('<') > -1) {
             var div = document.createElement('div');
@@ -234,12 +218,6 @@ def _build_pyvis_html(df_comm, df_city, df_inter, df_intra_od_pairs,
           if (e.title) edges.update({id: e.id, title: _htmlTitle(e.title)});
         });
         """
-    # Post-network-creation:
-    #  - auto-fit once stabilised
-    #  - disable default wheel-zoom (it traps the page scroll)
-    #  - require Ctrl/Cmd + scroll to zoom (Google-Maps pattern)
-    #  - show a transient hint the first time the user tries to scroll-zoom
-    #    without the modifier
     post_init_js = """
         network.once("stabilizationIterationsDone", function() {
           network.fit({animation: {duration: 600, easingFunction: "easeInOutCubic"}});
@@ -287,6 +265,92 @@ def _build_pyvis_html(df_comm, df_city, df_inter, df_intra_od_pairs,
         + post_init_js,
     )
     return html
+
+
+def _build_pyvis_community_subgraph(community_id, df_comm, df_city,
+                                    df_intra_od_pairs, comm_color_map):
+    """Build a PyVis subgraph for ONE community: its cities + intra-community OD flows."""
+    from pyvis.network import Network
+
+    net = Network(
+        height="400px", width="100%",
+        bgcolor="#0F1117", font_color="#F9FAFB",
+        directed=True, notebook=False, cdn_resources="remote",
+    )
+    net.set_options("""
+    {
+      "nodes": {
+        "borderWidth": 2, "borderWidthSelected": 3,
+        "font": {"size": 14, "face": "IBM Plex Sans", "color": "#F9FAFB"}
+      },
+      "edges": {
+        "smooth": {"enabled": true, "type": "dynamic", "roundness": 0.3},
+        "selectionWidth": 1.5
+      },
+      "physics": {
+        "barnesHut": {
+          "gravitationalConstant": -2500, "centralGravity": 0.35,
+          "springLength": 130, "springConstant": 0.06,
+          "damping": 0.2, "avoidOverlap": 0.5
+        },
+        "minVelocity": 0.6, "solver": "barnesHut",
+        "stabilization": {"enabled": true, "iterations": 200, "fit": true}
+      },
+      "interaction": {
+        "hover": true, "dragNodes": true, "zoomView": true,
+        "tooltipDelay": 80, "navigationButtons": true
+      }
+    }
+    """)
+
+    cities = df_comm[df_comm["community_id"] == community_id]["city"].tolist()
+    color = comm_color_map.get(community_id, "#6B7280")
+
+    city_in  = dict(zip(df_city["city"], df_city["inbound"]))  if not df_city.empty else {}
+    city_out = dict(zip(df_city["city"], df_city["outbound"])) if not df_city.empty else {}
+
+    if cities:
+        max_total = max(
+            (city_in.get(c, 0) + city_out.get(c, 0) for c in cities), default=1
+        ) or 1
+        for city in cities:
+            total = city_in.get(city, 0) + city_out.get(city, 0)
+            size = 18 + 28 * (total / max_total)
+            net.add_node(
+                city, label=city,
+                color={"background": color, "border": "#0F1117",
+                       "highlight": {"background": color, "border": "#F9FAFB"}},
+                size=size,
+                title=(f"<b>{city}</b><br>Community {community_id}<br>"
+                       f"Inbound: {city_in.get(city, 0):,}<br>"
+                       f"Outbound: {city_out.get(city, 0):,}<br>"
+                       f"Total: {total:,}"),
+            )
+
+    df_edges = df_intra_od_pairs[df_intra_od_pairs["community_id"] == community_id]
+    if not df_edges.empty:
+        max_orders = int(df_edges["orders"].max()) or 1
+        for _, r in df_edges.iterrows():
+            u, v = r["origin"], r["destination"]
+            if u not in cities or v not in cities:
+                continue
+            orders = int(r["orders"])
+            width = 1.5 + 4 * (orders / max_orders)
+            delay = float(r.get("delay_rate_pct", 0) or 0)
+            disruption = float(r.get("disruption_rate_pct", 0) or 0)
+            net.add_edge(
+                u, v,
+                color={"color": color, "hover": color, "highlight": color},
+                width=width,
+                arrows={"to": {"enabled": True, "scaleFactor": 0.8}},
+                title=(f"<b>{u} &rarr; {v}</b><br>"
+                       f"Orders: {orders:,}<br>"
+                       f"Delay: {delay:.1f}%<br>"
+                       f"Disruption: {disruption:.1f}%"),
+                physics=True,
+            )
+
+    return _apply_pyvis_post_processing(net.generate_html(notebook=False))
 
 st.markdown("""
 <style>
@@ -880,6 +944,28 @@ else:
     kpi_card(k2, "Disruption rate",     f"{disrupt_rate:.1f}%",   disrupt_color, "% disrupted orders")
     kpi_card(k3, "Avg risk score",      f"{risk_score:.3f}",      risk_color,    "risk — 1 = critical")
     kpi_card(k4, "Route concentration", f"{route_conc:.3f}",      conc_color,    "HHI — 1 = single route")
+
+    # Community subgraph
+    st.markdown("")
+    st.markdown(
+        f'<div class="section-label" style="color:{comm_color}">Internal network</div>',
+        unsafe_allow_html=True,
+    )
+    try:
+        subgraph_html = _build_pyvis_community_subgraph(
+            selected_community, df_comm, df_city,
+            df_intra_od_pairs, comm_color_map,
+        )
+        st.components.v1.html(subgraph_html, height=420, scrolling=False)
+        st.caption(
+            f"Cities in Community {selected_community} and their internal flows · "
+            "Arrow width ∝ orders · "
+            "Drag to rearrange · Hold Ctrl/⌘ + scroll to zoom · Hover for delay & disruption stats."
+        )
+    except ModuleNotFoundError:
+        st.warning("PyVis is not installed. Run `pip install pyvis` to enable this view.")
+    except Exception as e:
+        st.warning(f"Could not render community subgraph: {e}")
 
     # OD pairs table
     st.markdown("")
