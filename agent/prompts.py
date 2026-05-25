@@ -74,3 +74,17 @@ You reason step by step and use tools to answer questions accurately.
 - If you reach the tool call limit without enough data, say what you found and
   what information was unavailable.
 """
+
+temp = """
+Tal com s’ha comentat en l’apartat 3.2 s’ha detectat una incidencia relacionada amb el temps de resposta de l’agent. Les mesures obtingudes amb LangSmith indiquen una latència mitjana de 15–20 s per consulta i un cost estimat d’entre 0,01 i 0,03 $.
+
+Per reduir la latència i el cost, s’implementarà una capa de memòria semàntica basada en embeddings i cerca vectorial (supabase + pgvector). Per a cada consulta es generarà un embedding de la pregunta i s’emmagatzemarà juntament amb informació associada, com ara la pregunta original, la resposta generada, la consulta Cypher corresponent i la marca temporal. El flux serà:
+•	La UI envia la pregunta a l’orquestrador; es calcula l’embedding de la pregunta.
+•	Es fa una cerca de similitud semàntica sobre les consultes prèvies emmagatzemades (top-k).
+o	Si hi ha una coincidència gairebé exacta (score ≥ llindar exacte), es retorna directament la resposta emmagatzemada (zero prompt addicional).
+o	Si hi ha una coincidència alta però no exacta (llindar reutilització ≤ score < umbral_exacte), es recupera el Cypher associat a l’entrada coincidida, s’executa a Neo4j i es retorna el resultat (reutilització de consultes validades).
+o	Si no es troba cap coincidència adequada (score < llindar reutilització), s’invoca el model de raonament per generar el Cypher, es realitzen les validacions de seguretat/format, s’executa a Neo4j i la nova parella (pregunta, resposta, Cypher) s’emmagatzema amb el seu embedding perquè serveixi per futures reutilitzacions.
+
+Aquesta aproximació permet evitar reenviar contínuament l’esquema i prompts llargs al model (reduint tokens i cost) i reutilitzar consultes prèvies validades (disminuint la latència). 
+
+"""
