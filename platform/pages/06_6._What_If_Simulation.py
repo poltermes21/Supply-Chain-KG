@@ -85,12 +85,13 @@ def styled_yaxis(**kwargs):
 _STATUS_SEVERITY = {"fully_blocked": 3, "primary_loss": 2, "partial_loss": 1}
 
 
-def _build_pyvis_route_shock(df_reroute, all_cities, status_palette):
-    """Network of affected OD lanes after a route blockade.
+def _build_pyvis_route_shock(df_reroute, df_all_flow, all_cities, status_palette):
+    """Network of OD lanes after a route blockade, on top of the full topology.
 
-    Nodes coloured by the worst shock status touching them, sized by the
-    total affected orders incident to the city. Edges are directional arrows
-    per affected lane, coloured by `shock_status`, dashed when fully blocked.
+    The full CITY_FLOW network is drawn as a faint grey backdrop so the user
+    can see context. Affected lanes (from `df_reroute`) are then overlaid in
+    their shock-status colour. Nodes are coloured by the worst status touching
+    them and sized by the total affected orders incident to the city.
     """
     from pyvis.network import Network
 
@@ -165,6 +166,29 @@ def _build_pyvis_route_shock(df_reroute, all_cities, status_palette):
                    f"Affected lanes: {lanes}"),
         )
 
+    # Faint backdrop: all CITY_FLOW edges that are NOT in the affected set.
+    affected_pairs = set()
+    if not df_reroute.empty:
+        affected_pairs = {(r["origin"], r["destination"])
+                          for _, r in df_reroute.iterrows()}
+    if df_all_flow is not None and not df_all_flow.empty:
+        for _, r in df_all_flow.iterrows():
+            u, v = r["origin"], r["destination"]
+            if (u, v) in affected_pairs:
+                continue
+            net.add_edge(
+                u, v,
+                color={"color": "rgba(140,140,160,0.18)",
+                       "hover": "rgba(180,180,200,0.45)"},
+                width=1,
+                arrows={"to": {"enabled": True, "scaleFactor": 0.45}},
+                title=(f"<b>{u} &rarr; {v}</b><br>"
+                       f"Orders: {int(r['orders']):,}<br>"
+                       f"Not affected"),
+                physics=True,
+            )
+
+    # Affected lanes overlaid on top, coloured by shock status.
     if not df_reroute.empty:
         max_orders = int(df_reroute["affected_orders"].max()) or 1
         for _, r in df_reroute.iterrows():
@@ -174,6 +198,11 @@ def _build_pyvis_route_shock(df_reroute, all_cities, status_palette):
             orders = int(r["affected_orders"])
             width = 1.5 + 4 * (orders / max_orders)
             is_severed = status == "fully_blocked"
+            blocked_list = r.get("blocked_routes") or []
+            surviving_list = r.get("surviving_routes") or []
+            primary = r.get("primary_route") or "—"
+            blocked_str = ", ".join(blocked_list) if len(blocked_list) else "—"
+            surviving_str = ", ".join(surviving_list) if len(surviving_list) else "none"
             net.add_edge(
                 u, v,
                 color={"color": color, "hover": color, "highlight": color},
@@ -183,22 +212,26 @@ def _build_pyvis_route_shock(df_reroute, all_cities, status_palette):
                 title=(f"<b>{u} &rarr; {v}</b><br>"
                        f"Status: {status_palette[status]['label']}<br>"
                        f"Affected orders: {orders:,}<br>"
-                       f"Surviving routes: {int(r['surviving_route_count'])} / "
-                       f"{int(r['total_routes'])}<br>"
-                       f"Blocked: {float(r['blocked_pct']):.0f}%"),
+                       f"Primary route: {primary}<br>"
+                       f"Blocked routes: {blocked_str}<br>"
+                       f"Surviving routes: {surviving_str}<br>"
+                       f"Blocked share: {float(r['blocked_pct']):.0f}%"),
                 physics=True,
             )
 
     return apply_pyvis_post_processing(net.generate_html(notebook=False))
 
 
-def _build_pyvis_node_failure(df_global, blocked_cities, all_cities):
-    """Network of severed lanes after one or more node failures.
+def _build_pyvis_node_failure(df_global, df_all_flow, blocked_cities, all_cities):
+    """Network of severed lanes after one or more node failures, on top of
+    the full topology.
 
-    Failed cities are rendered solid red with a dashed border. Cities sitting
-    on a severed lane are tinted red proportionally to the affected order
-    volume; the rest stay dim grey. Every severed lane is a dashed red arrow
-    whose width is proportional to its affected orders.
+    The whole CITY_FLOW network is drawn as a faint grey backdrop so the user
+    can see the unaffected lanes for context. Failed cities are rendered solid
+    red with a dashed border. Cities sitting on a severed lane are tinted red
+    proportionally to the affected order volume; the rest stay dim grey. Every
+    severed lane is a dashed red arrow whose width is proportional to its
+    affected orders.
     """
     from pyvis.network import Network
 
@@ -279,6 +312,29 @@ def _build_pyvis_node_failure(df_global, blocked_cities, all_cities):
                        f"Affected orders (incident): {affected:,}"),
             )
 
+    # Faint backdrop: all CITY_FLOW edges that aren't severed.
+    severed_pairs = set()
+    if not df_global.empty:
+        severed_pairs = {(r["origin"], r["destination"])
+                         for _, r in df_global.iterrows()}
+    if df_all_flow is not None and not df_all_flow.empty:
+        for _, r in df_all_flow.iterrows():
+            u, v = r["origin"], r["destination"]
+            if (u, v) in severed_pairs:
+                continue
+            net.add_edge(
+                u, v,
+                color={"color": "rgba(140,140,160,0.18)",
+                       "hover": "rgba(180,180,200,0.45)"},
+                width=1,
+                arrows={"to": {"enabled": True, "scaleFactor": 0.45}},
+                title=(f"<b>{u} &rarr; {v}</b><br>"
+                       f"Orders: {int(r['orders']):,}<br>"
+                       f"Not affected"),
+                physics=True,
+            )
+
+    # Severed lanes overlaid on top.
     if not df_global.empty:
         max_orders = int(df_global["affected_orders"].max()) or 1
         for _, r in df_global.iterrows():
@@ -474,12 +530,13 @@ with tab_route:
                 df_overview = Block6Queries.route_shock_overview(driver, blocked_routes)
                 df_reroute  = Block6Queries.route_shock_reroutability(driver, blocked_routes)
                 df_penalty  = Block6Queries.route_shock_penalty_estimate(driver, blocked_routes)
-            st.session_state["route_results"] = (df_overview, df_reroute, df_penalty)
+                df_all_flow = Block6Queries.all_city_flow(driver)
+            st.session_state["route_results"] = (df_overview, df_reroute, df_penalty, df_all_flow)
             st.session_state["route_blocked"] = blocked_routes
 
     # Render stored results (only if they exist)
     if st.session_state.get("route_results") is not None:
-        df_overview, df_reroute, df_penalty = st.session_state["route_results"]
+        df_overview, df_reroute, df_penalty, df_all_flow = st.session_state["route_results"]
         displayed_routes = st.session_state.get("route_blocked", blocked_routes)
 
         if df_overview.empty:
@@ -550,15 +607,15 @@ with tab_route:
 
                     try:
                         route_html = _build_pyvis_route_shock(
-                            df_reroute, ALL_CITIES, SHOCK_STATUS,
+                            df_reroute, df_all_flow, ALL_CITIES, SHOCK_STATUS,
                         )
                         render_pyvis_html(route_html, height=520)
                         st.caption(
-                            "Arrows = affected OD lanes · colored by shock status · "
-                            "width ∝ affected orders · dashed = no surviving route. "
-                            "Node color = worst status touching the city · "
-                            "size ∝ total affected orders. "
-                            "Drag · Hold Ctrl/⌘ + scroll to zoom · Hover for details."
+                            "Coloured arrows = affected lanes (width ∝ affected orders, "
+                            "dashed = no surviving route) · "
+                            "Faint arrows = unaffected lanes (full topology backdrop) · "
+                            "Node color = worst status touching the city, size ∝ affected orders. "
+                            "Hover an affected lane to see primary / blocked / surviving routes."
                         )
                     except ModuleNotFoundError:
                         st.warning("PyVis is not installed. Run `pip install pyvis` to enable this view.")
@@ -732,12 +789,13 @@ with tab_node:
             with st.spinner("Simulating node failure..."):
                 df_local  = Block6Queries.node_failure_local_impact(driver, blocked_cities)
                 df_global = Block6Queries.node_failure_global_impact(driver, blocked_cities)
-            st.session_state["node_results"] = (df_local, df_global)
+                df_all_flow_n = Block6Queries.all_city_flow(driver)
+            st.session_state["node_results"] = (df_local, df_global, df_all_flow_n)
             st.session_state["node_blocked"] = blocked_cities
 
     # Render stored results (only if they exist)
     if st.session_state.get("node_results") is not None:
-        df_local, df_global = st.session_state["node_results"]
+        df_local, df_global, df_all_flow_n = st.session_state["node_results"]
         displayed_cities = st.session_state.get("node_blocked", blocked_cities)
 
         if df_local.empty:
@@ -796,14 +854,15 @@ with tab_node:
 
             try:
                 node_html = _build_pyvis_node_failure(
-                    df_global, displayed_cities, ALL_CITIES,
+                    df_global, df_all_flow_n, displayed_cities, ALL_CITIES,
                 )
                 render_pyvis_html(node_html, height=520)
                 st.caption(
-                    "Failed cities are rendered with a dashed red border · "
+                    "Failed cities have a dashed red border · "
                     "Amber nodes = cities with downstream impact (size ∝ affected orders) · "
-                    "Dashed red arrows = severed lanes (width ∝ affected orders). "
-                    "Drag · Hold Ctrl/⌘ + scroll to zoom · Hover for risk / cost / lead time."
+                    "Dashed red arrows = severed lanes (width ∝ affected orders) · "
+                    "Faint arrows = unaffected lanes (full topology backdrop). "
+                    "Hover a severed lane for risk / cost / lead time."
                 )
             except ModuleNotFoundError:
                 st.warning("PyVis is not installed. Run `pip install pyvis` to enable this view.")

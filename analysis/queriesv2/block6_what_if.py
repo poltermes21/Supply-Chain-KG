@@ -83,28 +83,54 @@ class Block6Queries:
     """   
 
     # 6.2 ROUTE-SHOCK REROUTABILITY
+    # The primary route is derived from `route_share` (a JSON-encoded
+    # {route_id: share} map) — it's the key with the highest value. A lane
+    # is in `primary_loss` only when that dominant route is among the blocked
+    # ones; otherwise (some routes blocked, primary still alive) it's a
+    # `partial_loss`.
 
     ROUTE_SHOCK_REROUTABILITY = """
         MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
         WITH
             orig, dest, f,
             [r IN f.routes_used WHERE r IN $blocked_routes] AS blocked_hits,
-            [r IN f.routes_used WHERE NOT r IN $blocked_routes] AS surviving_routes
+            [r IN f.routes_used WHERE NOT r IN $blocked_routes] AS surviving_routes_list,
+            apoc.convert.fromJsonMap(coalesce(f.route_share, '{}')) AS shares
         WHERE size(blocked_hits) > 0
+        WITH
+            orig, dest, f, blocked_hits, surviving_routes_list,
+            reduce(maxR = ['', 0.0], r IN keys(shares) |
+                CASE WHEN shares[r] > maxR[1] THEN [r, shares[r]] ELSE maxR END
+            )[0] AS primary_route
         RETURN
             orig.id AS origin,
             dest.id AS destination,
             f.orders AS affected_orders,
+            blocked_hits AS blocked_routes,
+            surviving_routes_list AS surviving_routes,
             size(blocked_hits) AS blocked_route_count,
-            size(surviving_routes) AS surviving_route_count,
+            size(surviving_routes_list) AS surviving_route_count,
             size(f.routes_used) AS total_routes,
             100.0 * size(blocked_hits) / size(f.routes_used) AS blocked_pct,
+            primary_route,
             CASE
-                WHEN size(surviving_routes) = 0 THEN 'fully_blocked'
-                WHEN f.primary_route IN $blocked_routes THEN 'primary_loss'
+                WHEN size(surviving_routes_list) = 0 THEN 'fully_blocked'
+                WHEN primary_route IN $blocked_routes THEN 'primary_loss'
                 ELSE 'partial_loss'
             END AS shock_status
         ORDER BY surviving_route_count ASC, affected_orders DESC
+    """
+
+    # Full CITY_FLOW topology — used as a faint backdrop on the network
+    # visualisations so the user can see the whole network at a glance, with
+    # the affected lanes highlighted on top.
+    ALL_CITY_FLOW = """
+        MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
+        RETURN
+            orig.id AS origin,
+            dest.id AS destination,
+            f.orders AS orders
+        ORDER BY orders DESC
     """
 
     # 6.3 ROUTE-SHOCK PENALTY ESTIMATE
@@ -270,6 +296,19 @@ class Block6Queries:
             driver,
             Block6Queries.ROUTE_SHOCK_REROUTABILITY,
             blocked_routes=blocked_routes
+        )
+
+    @staticmethod
+    def all_city_flow(driver) -> pd.DataFrame:
+        """Return every CITY_FLOW edge (origin, destination, orders).
+
+        Used as a faint backdrop on the route-shock and node-failure network
+        visualisations so the user always sees the whole network, not just
+        the affected slice.
+        """
+        return Block6Queries._run_query_with_params(
+            driver,
+            Block6Queries.ALL_CITY_FLOW,
         )
 
     @staticmethod
