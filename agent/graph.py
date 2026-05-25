@@ -13,13 +13,13 @@ from .llm import get_interface_llm, get_reasoning_llm
 from .memory import get_memory
 from .prompts import CHITCHAT_CLASSIFIER_SYSTEM, CHITCHAT_SYSTEM, REACT_SYSTEM
 from .state import AgentInput, AgentOutput
-from .tools import query_graph, answer_from_context
+from .tools import query_graph
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build the ReAct agent (singleton — compiled once at import time)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_TOOLS = [query_graph, answer_from_context]
+_TOOLS = [query_graph]
 
 _react_agent = create_react_agent(
     model=get_reasoning_llm(temperature=0),

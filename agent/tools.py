@@ -5,10 +5,14 @@ Core tools for the ReAct agent to interact with the Supply Chain Knowledge Graph
 
 Tools:
 - query_graph: executes validated Cypher queries on Neo4j
-- answer_from_context: answers using only existing conversation context
 
-All tools are read-only. The validator runs inside every tool that touches Neo4j,
+The tool is read-only. The validator runs inside every tool that touches Neo4j,
 acting as a hard firewall independent of the LLM's behaviour.
+
+When the agent already has enough information to answer (from conversation
+history or prior tool results), it responds directly with plain text — no
+tool call needed. LangGraph's prebuilt ReAct loop ends as soon as the LLM
+emits a message with no tool calls.
 """
 
 import re
@@ -100,13 +104,20 @@ def _validate(cypher: str) -> None:
         )
 
 
-def _run_read(cypher: str, params: dict | None = None) -> list[dict]:
-    """Execute a validated Cypher query inside a READ transaction."""
+def _run_read(cypher: str, params: dict | None = None) -> tuple[list[dict], bool]:
+    """Execute a validated Cypher query inside a READ transaction.
+
+    Returns (records, truncated). Records are capped at _MAX_RECORDS to keep
+    the ReAct context bounded; `truncated` indicates whether the underlying
+    result had more rows than the cap.
+    """
     driver = get_neo4j_driver()
 
     def _tx(tx):
         result = tx.run(cypher, **(params or {}))
-        return [dict(r) for r in result][:_MAX_RECORDS]
+        rows = [dict(r) for r in result]
+        truncated = len(rows) > _MAX_RECORDS
+        return rows[:_MAX_RECORDS], truncated
 
     with driver.session() as session:
         return session.execute_read(_tx)
@@ -132,32 +143,21 @@ def query_graph(cypher: str) -> str:
     try:
         cypher = _ensure_limit(cypher)
         _validate(cypher)
-        records = _run_read(cypher)
+        records, truncated = _run_read(cypher)
         if not records:
             return "No records returned. The query ran successfully but matched nothing."
-        return json.dumps(records, indent=2, default=str)
+        payload = json.dumps(records, indent=2, default=str)
+        if truncated:
+            payload = (
+                f"NOTE: Results truncated to {_MAX_RECORDS} records — the underlying "
+                f"query produced more. If you need totals or rankings beyond the top "
+                f"{_MAX_RECORDS}, rewrite the query as an aggregation (count, avg, "
+                f"sum) or tighten the filter.\n\n"
+            ) + payload
+        return payload
     except ValueError as e:
         return f"ERROR (validation): {e}"
     except Exception as e:
         return f"ERROR (execution): {e}"
 
 
-# Tool 2 - answer_from_context
-
-@tool
-def answer_from_context(reasoning: str) -> str:
-    """
-    Use this tool when you can answer the user's question using ONLY the
-    information already present in the conversation history — without querying
-    the database again.
-
-    Examples of when to use this:
-    - "What does that percentage mean?"
-    - "Which of the routes you listed has the lowest frequency?"
-    - "Summarise what we've discussed so far."
-    - Any clarification or explanation of data already returned.
-
-    Pass your reasoning/answer as the 'reasoning' argument.
-    The content will be returned directly to the user.
-    """
-    return reasoning
