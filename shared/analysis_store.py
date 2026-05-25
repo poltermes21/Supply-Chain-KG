@@ -56,11 +56,15 @@ def load_block_data(
             f"No written analysis outputs found for block '{block_name}'."
         )
 
+    analysis_root = resolve_analysis_root(data_dir)
     data: dict[str, pd.DataFrame] = {}
     for _, row in block_rows.iterrows():
         latest_path = Path(row["latest_path"])
         if not latest_path.exists():
             latest_path = Path(row["parquet_path"])
+        if not latest_path.exists():
+            # Stored paths may be absolute paths from another machine; reconstruct locally.
+            latest_path = analysis_root / row["block"] / row["query_name"] / "latest.parquet"
         if not latest_path.exists():
             raise FileNotFoundError(
                 f"Missing parquet for {block_name}/{row['query_name']}: {latest_path}"

@@ -13,13 +13,16 @@ neo4j>=5.0.0
 # Data visualization
 matplotlib>=3.7.0
 seaborn>=0.12.0
+plotly>=5.0.0
+pyarrow>=12.0.0
+networkx>=3.0
 
 # Testing
 pytest>=7.4.0
 
 # Agent
 langgraph==0.3.34
-langchain==0.3.25
+langchain>=0.3.25
 langchain-google-genai==2.1.4
 
 # Streamlit
