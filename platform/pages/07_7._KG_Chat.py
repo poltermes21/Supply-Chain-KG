@@ -7,6 +7,7 @@ Adapted for the ReAct agent: uses agent.run(), supports multi-query Cypher audit
 import streamlit as st
 import uuid
 import re
+import markdown as md_lib
 from agent import run as agent_run, get_memory
 
 st.set_page_config(page_title="KG Chat", layout="wide")
@@ -153,16 +154,12 @@ with st.sidebar:
 
 # HELPERS
 def md_to_html(text: str) -> str:
-    """Convert basic Markdown to HTML for unsafe_allow_html rendering."""
-    # Bold
-    text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
-    # Italic
-    text = re.sub(r'\*(.*?)\*', r'<em>\1</em>', text)
-    # Inline code
-    text = re.sub(r'`(.*?)`', r'<code>\1</code>', text)
-    # Line breaks
-    text = text.replace('\n', '<br>')
-    return text
+    # Normalize bullets
+    text = re.sub(r'(?m)^\*\s+', '- ', text)
+    return md_lib.markdown(
+        text,
+        extensions=["nl2br", "tables"],
+    )
 
 def render_user_msg(content: str) -> None:
     st.markdown(

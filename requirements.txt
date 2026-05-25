@@ -24,6 +24,7 @@ langchain-google-genai==2.1.4
 
 # Streamlit
 streamlit>=1.35.0
+markdown>=3.5.0
 
 # Pydantic
 pydantic>=2.0.0
