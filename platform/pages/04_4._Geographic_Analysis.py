@@ -2,8 +2,6 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-import numpy as np
-import networkx as nx
 from shared.analysis_store import load_block_data
 from shared.ui_helpers import render_section_header
 
@@ -53,6 +51,242 @@ def styled_yaxis(**kwargs):
     )
     d.update(kwargs)
     return d
+
+
+def _build_pyvis_html(df_comm, df_city, df_inter, df_intra_od_pairs,
+                      bridge_lanes, comm_color_map):
+    """Build an interactive PyVis (vis.js) network and return the HTML string."""
+    from pyvis.network import Network
+
+    net = Network(
+        height="600px", width="100%",
+        bgcolor="#0F1117", font_color="#F9FAFB",
+        directed=True, notebook=False, cdn_resources="remote",
+    )
+
+    net.set_options("""
+    {
+      "nodes": {
+        "borderWidth": 2,
+        "borderWidthSelected": 3,
+        "font": {"size": 14, "face": "IBM Plex Sans", "color": "#F9FAFB"}
+      },
+      "edges": {
+        "smooth": {"enabled": true, "type": "dynamic", "roundness": 0.3},
+        "selectionWidth": 1.5
+      },
+      "physics": {
+        "barnesHut": {
+          "gravitationalConstant": -3500,
+          "centralGravity": 0.25,
+          "springLength": 160,
+          "springConstant": 0.05,
+          "damping": 0.18,
+          "avoidOverlap": 0.4
+        },
+        "minVelocity": 0.6,
+        "solver": "barnesHut",
+        "stabilization": {"enabled": true, "iterations": 200, "fit": true}
+      },
+      "interaction": {
+        "hover": true,
+        "dragNodes": true,
+        "zoomView": true,
+        "tooltipDelay": 80,
+        "navigationButtons": true
+      }
+    }
+    """)
+
+    city_to_comm = dict(zip(df_comm["city"], df_comm["community_id"]))
+    city_in  = dict(zip(df_city["city"], df_city["inbound"]))  if not df_city.empty else {}
+    city_out = dict(zip(df_city["city"], df_city["outbound"])) if not df_city.empty else {}
+    max_total = max(
+        (city_in.get(c, 0) + city_out.get(c, 0) for c in city_to_comm),
+        default=1,
+    ) or 1
+
+    for city, cid in city_to_comm.items():
+        total = city_in.get(city, 0) + city_out.get(city, 0)
+        size = 14 + 26 * (total / max_total)
+        color = comm_color_map.get(cid, "#6B7280")
+        net.add_node(
+            city, label=city,
+            color={"background": color, "border": "#0F1117",
+                   "highlight": {"background": color, "border": "#F9FAFB"}},
+            size=size,
+            title=(f"<b>{city}</b><br>Community {cid}<br>"
+                   f"Inbound: {city_in.get(city, 0):,}<br>"
+                   f"Outbound: {city_out.get(city, 0):,}<br>"
+                   f"Total: {total:,}"),
+        )
+
+    # Intra edges: faint grey, no arrowheads
+    if not df_intra_od_pairs.empty:
+        intra_agg = {}
+        for _, r in df_intra_od_pairs.iterrows():
+            key = frozenset([r["origin"], r["destination"]])
+            intra_agg[key] = intra_agg.get(key, 0) + int(r["orders"])
+        for pair, orders in intra_agg.items():
+            a, b = tuple(pair)
+            if a not in city_to_comm or b not in city_to_comm:
+                continue
+            net.add_edge(
+                a, b,
+                color={"color": "rgba(140,140,160,0.22)",
+                       "hover": "rgba(180,180,200,0.6)"},
+                width=1,
+                arrows={"to": {"enabled": False}, "from": {"enabled": False}},
+                title=(f"<b>{a} &harr; {b}</b><br>"
+                       f"Intra-community flow<br>{orders:,} orders"),
+                physics=True,
+            )
+
+    # Inter edges: directional, colored by source community (one per direction)
+    df_pairs = (df_inter.groupby(["from_city", "to_city"])
+                .agg(orders=("orders", "sum"),
+                     from_community=("from_community", "first"))
+                .reset_index())
+    max_inter = int(df_pairs["orders"].max()) if not df_pairs.empty else 1
+    crit = {frozenset([bl["from_city"], bl["to_city"]]) for bl in bridge_lanes}
+
+    for _, r in df_pairs.iterrows():
+        u, v = r["from_city"], r["to_city"]
+        if u not in city_to_comm or v not in city_to_comm:
+            continue
+        orders = int(r["orders"])
+        if frozenset([u, v]) in crit:
+            color = "#EF4444"
+            width = 4.5
+            tag = "<b style='color:#EF4444'>CRITICAL BRIDGE</b>"
+        else:
+            color = comm_color_map.get(r["from_community"], "#6B7280")
+            width = 2 + 4 * (orders / max_inter)
+            tag = "Inter-community bridge"
+        net.add_edge(
+            u, v,
+            color={"color": color, "hover": color, "highlight": color},
+            width=width,
+            arrows={"to": {"enabled": True, "scaleFactor": 0.8}},
+            title=f"<b>{u} &rarr; {v}</b><br>Orders: {orders:,}<br>{tag}",
+            physics=True,
+        )
+
+    html = net.generate_html(notebook=False)
+
+    # vis.js only renders HTML in tooltips when `title` is a DOM Element (not a
+    # string). Inject a post-init step that converts every HTML title string
+    # to a DOM element before the network is created, plus CSS to theme the
+    # popup so it matches the dark app palette.
+    tooltip_css = """
+    <style>
+      /* Strip PyVis's default Bootstrap card chrome so the canvas area is
+         flush with the dark page background — prevents the colored edge
+         lines from leaking against a white border. */
+      html, body { background-color: #0F1117 !important; margin: 0; padding: 0; }
+      .card {
+        background-color: #0F1117 !important;
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .card-body {
+        background-color: #0F1117 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+      #mynetwork {
+        background-color: #0F1117 !important;
+        overflow: hidden !important;
+        border: none !important;
+      }
+      /* Tooltip styling */
+      div.vis-tooltip {
+        background-color: #1A1D27 !important;
+        border: 1px solid #2A2D3A !important;
+        color: #F9FAFB !important;
+        font-family: 'IBM Plex Sans', sans-serif !important;
+        font-size: 12px !important;
+        line-height: 1.55 !important;
+        padding: 8px 12px !important;
+        border-radius: 6px !important;
+        max-width: 280px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+      }
+      div.vis-tooltip b { color: #F9FAFB; }
+    </style>
+    """
+    tooltip_js = """
+        // Convert HTML string titles to DOM elements (vis.js needs this to render HTML)
+        function _htmlTitle(text) {
+          if (typeof text === 'string' && text.indexOf('<') > -1) {
+            var div = document.createElement('div');
+            div.innerHTML = text;
+            return div;
+          }
+          return text;
+        }
+        nodes.get().forEach(function(n) {
+          if (n.title) nodes.update({id: n.id, title: _htmlTitle(n.title)});
+        });
+        edges.get().forEach(function(e) {
+          if (e.title) edges.update({id: e.id, title: _htmlTitle(e.title)});
+        });
+        """
+    # Post-network-creation:
+    #  - auto-fit once stabilised
+    #  - disable default wheel-zoom (it traps the page scroll)
+    #  - require Ctrl/Cmd + scroll to zoom (Google-Maps pattern)
+    #  - show a transient hint the first time the user tries to scroll-zoom
+    #    without the modifier
+    post_init_js = """
+        network.once("stabilizationIterationsDone", function() {
+          network.fit({animation: {duration: 600, easingFunction: "easeInOutCubic"}});
+        });
+        network.setOptions({interaction: {zoomView: false}});
+
+        var _netContainer = document.getElementById('mynetwork');
+        _netContainer.style.position = 'relative';
+
+        var _isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        var _zoomHint = document.createElement('div');
+        _zoomHint.style.cssText =
+          'position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);' +
+          'background:rgba(15,17,23,0.92); color:#F9FAFB; padding:10px 18px;' +
+          'border-radius:6px; font-family:"IBM Plex Sans",sans-serif;' +
+          'font-size:13px; pointer-events:none; opacity:0;' +
+          'transition:opacity 0.25s; z-index:1000; white-space:nowrap;' +
+          'border:1px solid #2A2D3A;';
+        _zoomHint.textContent = 'Hold ' + (_isMac ? '⌘' : 'Ctrl') + ' + scroll to zoom';
+        _netContainer.appendChild(_zoomHint);
+
+        var _hintTimer = null;
+        _netContainer.addEventListener('wheel', function(e) {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            var scale = network.getScale();
+            var direction = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+            var newScale = Math.max(0.4, Math.min(3.0, scale * direction));
+            network.moveTo({scale: newScale, animation: false});
+          } else {
+            _zoomHint.style.opacity = '1';
+            if (_hintTimer) clearTimeout(_hintTimer);
+            _hintTimer = setTimeout(function() {
+              _zoomHint.style.opacity = '0';
+            }, 800);
+          }
+        }, { passive: false });
+        """
+
+    html = html.replace("</head>", tooltip_css + "</head>")
+    html = html.replace(
+        "network = new vis.Network(container, data, options);",
+        tooltip_js
+        + "\n        network = new vis.Network(container, data, options);\n"
+        + post_init_js,
+    )
+    return html
 
 st.markdown("""
 <style>
@@ -538,267 +772,26 @@ if not df_inter.empty:
                 unsafe_allow_html=True
             )
 
-    # Network graph
+    # Interactive network graph (PyVis / vis.js)
     st.markdown('<div class="section-label">Network — community structure and bridges</div>', unsafe_allow_html=True)
-
-    def hex_to_rgba(hex_color, alpha=1.0):
-        hex_color = hex_color.lstrip("#")
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-        return f"rgba({r},{g},{b},{alpha})"
-
-    # Build undirected graph of cities; edge weight = aggregated orders in either direction
-    G = nx.Graph()
-    city_to_comm = dict(zip(df_comm["city"], df_comm["community_id"]))
-    city_in  = dict(zip(df_city["city"], df_city["inbound"])) if not df_city.empty else {}
-    city_out = dict(zip(df_city["city"], df_city["outbound"])) if not df_city.empty else {}
-
-    for city, cid in city_to_comm.items():
-        G.add_node(city, community=cid)
-
-    # Intra-community edges (background structure)
-    if not df_intra_od_pairs.empty:
-        for _, row in df_intra_od_pairs.iterrows():
-            u, v = row["origin"], row["destination"]
-            if u not in G or v not in G:
-                continue
-            w = int(row["orders"])
-            if G.has_edge(u, v):
-                G[u][v]["weight"] += w
-            else:
-                G.add_edge(u, v, weight=w, type="intra",
-                           community=row["community_id"])
-
-    # Inter-community edges (foreground bridges)
-    df_inter_pairs = (
-        df_inter.groupby(["from_city", "to_city"])
-        .agg(orders=("orders", "sum"),
-             from_community=("from_community", "first"),
-             to_community=("to_community", "first"))
-        .reset_index()
-    )
-
-    critical_pairs = set()
-    for bl in bridge_lanes:
-        critical_pairs.add(frozenset([bl["from_city"], bl["to_city"]]))
-
-    for _, row in df_inter_pairs.iterrows():
-        u, v = row["from_city"], row["to_city"]
-        if u not in G or v not in G:
-            continue
-        w = int(row["orders"])
-        if G.has_edge(u, v) and G[u][v].get("type") == "intra":
-            G[u][v]["weight"] += w
-            G[u][v]["type"] = "inter"
-            G[u][v]["from_community"] = row["from_community"]
-            G[u][v]["to_community"] = row["to_community"]
-        elif G.has_edge(u, v):
-            G[u][v]["weight"] += w
-        else:
-            G.add_edge(u, v, weight=w, type="inter",
-                       from_community=row["from_community"],
-                       to_community=row["to_community"])
-
-    # Community-aware initial layout, then a few spring iterations to relax it
-    communities = sorted(set(city_to_comm.values()))
-    n_comm = len(communities)
-    angles = np.linspace(0, 2 * np.pi, n_comm, endpoint=False) + np.pi / 2
-    comm_centers = {c: (3.5 * np.cos(a), 3.5 * np.sin(a))
-                    for c, a in zip(communities, angles)}
-
-    initial_pos = {}
-    for cid in communities:
-        members = [c for c, x in city_to_comm.items() if x == cid]
-        cx, cy = comm_centers[cid]
-        if len(members) == 1:
-            initial_pos[members[0]] = (cx, cy)
-        else:
-            sub_angles = np.linspace(0, 2 * np.pi, len(members), endpoint=False)
-            for city, a in zip(members, sub_angles):
-                initial_pos[city] = (cx + 0.9 * np.cos(a), cy + 0.9 * np.sin(a))
-
-    pos = nx.spring_layout(G, pos=initial_pos, iterations=60,
-                           seed=42, weight="weight", k=0.9)
-
-    # Rotate layout so the structure's principal axis is horizontal
-    # (fills wide chart area instead of being vertically stretched).
-    coords = np.array([pos[n] for n in G.nodes()])
-    centered = coords - coords.mean(axis=0)
-    if len(coords) >= 2:
-        cov = np.cov(centered.T)
-        _, eigvecs = np.linalg.eigh(cov)
-        rotation = eigvecs[:, ::-1]  # largest eigenvector first → x-axis
-        centered = centered @ rotation
-
-    # Normalize to [-1, 1] independently per axis so the structure fills the
-    # chart box (we drop the equal-aspect constraint below).
-    xs, ys = centered[:, 0], centered[:, 1]
-    x_min, x_max = xs.min(), xs.max()
-    y_min, y_max = ys.min(), ys.max()
-    x_range = max(x_max - x_min, 1e-6)
-    y_range = max(y_max - y_min, 1e-6)
-    pos = {
-        n: (2 * (centered[i, 0] - x_min) / x_range - 1,
-            2 * (centered[i, 1] - y_min) / y_range - 1)
-        for i, n in enumerate(G.nodes())
-    }
-
-    # Edge traces (intra first, drawn behind)
-    edges_intra = [(u, v, d) for u, v, d in G.edges(data=True) if d.get("type") == "intra"]
-    edges_inter = [(u, v, d) for u, v, d in G.edges(data=True) if d.get("type") == "inter"]
-
-    fig_net = go.Figure()
-
-    # Faint intra edges — single trace for performance
-    intra_x, intra_y = [], []
-    for u, v, d in edges_intra:
-        x0, y0 = pos[u]; x1, y1 = pos[v]
-        intra_x += [x0, x1, None]
-        intra_y += [y0, y1, None]
-    if intra_x:
-        fig_net.add_trace(go.Scatter(
-            x=intra_x, y=intra_y,
-            mode="lines",
-            line=dict(color="rgba(120,120,140,0.22)", width=1),
-            hoverinfo="skip", showlegend=False,
-        ))
-
-    # Inter-community directional arrows — one arrow per direction.
-    # Bidirectional pairs get two parallel offset arrows so each side is visible.
-    inter_directed = {}
-    for _, row in df_inter_pairs.iterrows():
-        u, v = row["from_city"], row["to_city"]
-        if u not in pos or v not in pos:
-            continue
-        inter_directed[(u, v)] = {
-            "orders": int(row["orders"]),
-            "from_community": row["from_community"],
-            "to_community": row["to_community"],
-        }
-
-    bidir_pairs = {frozenset([u, v]) for (u, v) in inter_directed
-                   if (v, u) in inter_directed}
-
-    max_inter = max((d["orders"] for d in inter_directed.values()), default=1)
-    OFFSET = 0.04   # perpendicular separation for the two arrows of a bidir pair
-    SHRINK = 0.08   # pull arrow endpoints away from node centers
-
-    for (u, v), d in inter_directed.items():
-        p0 = np.array(pos[u], dtype=float)
-        p1 = np.array(pos[v], dtype=float)
-        vec = p1 - p0
-        length = np.linalg.norm(vec)
-        if length < 1e-6:
-            continue
-        unit = vec / length
-        # Right of direction (rotated 90° clockwise) — each arrow goes on
-        # its own right, so bidir pairs end up on opposite sides naturally.
-        perp_right = np.array([unit[1], -unit[0]])
-        offset_vec = perp_right * OFFSET if frozenset([u, v]) in bidir_pairs else 0.0
-
-        start = p0 + unit * SHRINK + offset_vec
-        end   = p1 - unit * SHRINK + offset_vec
-
-        is_critical = frozenset([u, v]) in critical_pairs
-        if is_critical:
-            color = "rgba(239,68,68,0.95)"
-            width = 3.2
-            tag = '<span style="color:#EF4444"><b>CRITICAL BRIDGE</b></span>'
-        else:
-            color = hex_to_rgba(comm_color_map.get(d["from_community"], "#6B7280"), 0.9)
-            width = 1.5 + 3.5 * (d["orders"] / max_inter)
-            tag = "Inter-community flow"
-
-        fig_net.add_annotation(
-            x=end[0], y=end[1],
-            ax=start[0], ay=start[1],
-            xref="x", yref="y", axref="x", ayref="y",
-            showarrow=True,
-            arrowhead=3,
-            arrowsize=1.4,
-            arrowwidth=width,
-            arrowcolor=color,
+    try:
+        pyvis_html = _build_pyvis_html(
+            df_comm, df_city, df_inter, df_intra_od_pairs,
+            bridge_lanes, comm_color_map,
         )
-
-        # Invisible hover marker at midpoint so the arrow has a tooltip.
-        mid = (start + end) / 2
-        fig_net.add_trace(go.Scatter(
-            x=[mid[0]], y=[mid[1]],
-            mode="markers",
-            marker=dict(size=18, color="rgba(0,0,0,0)"),
-            hovertemplate=(
-                f"<b>{u} → {v}</b><br>"
-                f"Orders: {d['orders']:,}<br>"
-                f"{tag}<extra></extra>"
-            ),
-            showlegend=False,
-        ))
-
-    # Nodes
-    max_total = max((city_in.get(c, 0) + city_out.get(c, 0) for c in G.nodes()), default=1) or 1
-    node_x, node_y, node_text, node_color, node_size, node_hover = [], [], [], [], [], []
-    for city in G.nodes():
-        x, y = pos[city]
-        comm = city_to_comm[city]
-        total = city_in.get(city, 0) + city_out.get(city, 0)
-        node_x.append(x); node_y.append(y)
-        node_text.append(city)
-        node_color.append(comm_color_map.get(comm, "#6B7280"))
-        node_size.append(18 + 26 * (total / max_total))
-        node_hover.append(
-            f"<b>{city}</b><br>"
-            f"Community {comm}<br>"
-            f"Inbound: {city_in.get(city, 0):,}<br>"
-            f"Outbound: {city_out.get(city, 0):,}<br>"
-            f"Total: {total:,}"
+        st.components.v1.html(pyvis_html, height=640, scrolling=False)
+        st.caption(
+            "Node color = community · Node size = total flow (inbound + outbound) · "
+            "Arrows = inter-community flows, colored by the source community (width ∝ orders) · "
+            "Red arrows = critical single-source dependencies · "
+            "Faint grey edges = intra-community connections · "
+            "Drag nodes to rearrange · Hold Ctrl/⌘ + scroll to zoom (or use the on-graph buttons) · "
+            "Hover for details."
         )
-
-    fig_net.add_trace(go.Scatter(
-        x=node_x, y=node_y,
-        mode="markers+text",
-        text=node_text,
-        textposition="top center",
-        textfont=dict(family=FONT_SANS, size=11, color="#F9FAFB"),
-        marker=dict(
-            size=node_size,
-            color=node_color,
-            line=dict(width=2, color="#0F1117"),
-        ),
-        hovertext=node_hover,
-        hoverinfo="text",
-        showlegend=False,
-    ))
-
-    # Community legend (one dummy trace per community for the side legend)
-    for cid in communities:
-        fig_net.add_trace(go.Scatter(
-            x=[None], y=[None],
-            mode="markers",
-            marker=dict(size=10, color=comm_color_map.get(cid, "#6B7280")),
-            name=f"Community {cid}",
-            showlegend=True,
-        ))
-
-    fig_net.update_layout(
-        **base_layout(height=480),
-        xaxis=dict(visible=False, range=[-1.18, 1.18]),
-        yaxis=dict(visible=False, range=[-1.18, 1.22]),
-        margin=dict(l=10, r=10, t=10, b=40),
-        legend=dict(
-            orientation="h", y=-0.02, x=0.5, xanchor="center", yanchor="top",
-            font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR),
-            bgcolor="rgba(0,0,0,0)",
-        ),
-    )
-    st.plotly_chart(fig_net, use_container_width=True)
-    st.caption(
-        "Node color = community · Node size = total flow (inbound + outbound) · "
-        "Arrows = inter-community flows, colored by the source community (width ∝ orders) · "
-        "Bidirectional pairs are drawn as two parallel arrows, one per direction · "
-        "Red arrows = critical single-source dependencies · "
-        "Faint grey edges = intra-community connections."
-    )
+    except ModuleNotFoundError:
+        st.warning("PyVis is not installed. Run `pip install pyvis` to enable this view.")
+    except Exception as e:
+        st.error(f"Could not render network: {e}")
 
     # Table
     st.markdown('<div class="section-label">Bridge lanes — inter-comunitity connections</div>', unsafe_allow_html=True)
