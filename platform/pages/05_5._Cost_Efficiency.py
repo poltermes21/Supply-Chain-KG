@@ -363,7 +363,7 @@ if not df_by_type.empty:
             secondary_y=True,
         )
         fig_cost.update_xaxes(**styled_xaxis())
-        st.plotly_chart(fig_cost, use_container_width=True)
+        st.plotly_chart(fig_cost, width='stretch')
         st.caption(
             "Bars represent average cost vs baseline. Dotted line shows P95 delay, "
             "while dashed line shows average delay. Both metrics share the right-hand axis (days)."
@@ -433,7 +433,7 @@ with col_radar:
             margin=dict(l=10, r=10, t=40, b=30),
         )
 
-        st.plotly_chart(fig_radar, use_container_width=True)
+        st.plotly_chart(fig_radar, width='stretch')
 
 
 # SECTION 3 - Global mitigation effectiveness
@@ -536,7 +536,7 @@ if not df_mit_sum.empty:
                     font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1)),
         margin=dict(l=12, r=12, t=30, b=12),
     )
-    st.plotly_chart(fig_stack, use_container_width=True)
+    st.plotly_chart(fig_stack, width='stretch')
 
 
 # SECTION 4 - Mitigation by disruption context
@@ -604,7 +604,7 @@ if not df_mit_disr.empty:
             "Fully", "Partially", "Not  ⚠", "Total Cases"
         ]
         st.dataframe(
-            df_table, hide_index=True, use_container_width=True,
+            df_table, hide_index=True, width='stretch',
             column_config={
                 "Effectiveness (%)": st.column_config.ProgressColumn(
                     "Effectiveness (%)", min_value=0, max_value=100, format="%.1f%%"),
@@ -738,7 +738,7 @@ if not df_mit_ctx.empty:
             ),
             margin=dict(l=12, r=12, t=20, b=60),
         )
-        st.plotly_chart(fig_ctx, use_container_width=True)
+        st.plotly_chart(fig_ctx, width='stretch')
 
         # Low-N warning global
         any_low_n = (cases_df < LOW_N_THRESHOLD).any(skipna=True).any()
@@ -758,7 +758,7 @@ if not df_mit_ctx.empty:
                 "Residual Delay (d)", "On Schedule (%)",
             ]
             st.dataframe(
-                df_ctx_display, hide_index=True, use_container_width=True,
+                df_ctx_display, hide_index=True, width='stretch',
                 column_config={
                     "Effectiveness (%)": st.column_config.ProgressColumn(
                         "Effectiveness (%)", min_value=0, max_value=100, format="%.1f%%"),
@@ -819,7 +819,7 @@ if not df_air.empty:
         yaxis=styled_yaxis(showgrid=False),
         margin=dict(l=12, r=150, t=16, b=12),
     )
-    st.plotly_chart(fig_air, use_container_width=True)
+    st.plotly_chart(fig_air, width='stretch')
     st.caption(
         "The dotted line represents the global average usage of expedited air freight. "
         "Bars above the line indicate disruptions that more frequently trigger "

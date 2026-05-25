@@ -389,7 +389,7 @@ fig.update_layout(
     margin=dict(l=10, r=10, t=10, b=10),
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width='stretch')
 
 # Transport Mode
 st.markdown('<div class="section-label">Transport Mode Split</div>', unsafe_allow_html=True)
@@ -434,7 +434,7 @@ if len(df_mode) >= 2:
                 ),
                 margin=dict(l=8, r=8, t=34, b=8),
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
 
 # SECTION 2 - Traffic distribution
@@ -464,7 +464,7 @@ with col_left:
         yaxis=styled_yaxis(showgrid=False),
         margin=dict(l=8, r=10, t=10, b=10),
     )
-    st.plotly_chart(fig_route, use_container_width=True)
+    st.plotly_chart(fig_route, width='stretch')
 
 with col_right:
     st.markdown('<div class="section-label">Route profile — Lead Time, Cost & Delay (normalized)</div>', unsafe_allow_html=True)
@@ -509,14 +509,14 @@ with col_right:
         legend=dict(font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), orientation="h", y=-0.18),
         margin=dict(l=30, r=30, t=30, b=50),
     )
-    st.plotly_chart(fig_radar, use_container_width=True)
+    st.plotly_chart(fig_radar, width='stretch')
 
 with st.expander("Detailed table by route"):
     st.caption("Tip: you can sort directly in the table by clicking on column headers.")
     df_display = df_route[["route", "total_orders", "pct_total", "avg_lead_time_days", "avg_cost_usd", "avg_delay_days", "delay_rate_pct"]].copy()
     df_display.columns = ["Route", "Orders", "% Total", "Avg LT (d)", "Avg Cost ($)", "Avg Delay (d)", "Delay Rate (%)"]
     st.dataframe(
-        df_display, hide_index=True, use_container_width=True,
+        df_display, hide_index=True, width='stretch',
         column_config={
             "% Total":        st.column_config.ProgressColumn("% Total",        min_value=0, max_value=100, format="%.1f%%"),
             "Delay Rate (%)": st.column_config.ProgressColumn("Delay Rate (%)", min_value=0, max_value=100, format="%.1f%%"),
@@ -555,7 +555,7 @@ fig_stacked.update_layout(
     legend=dict(font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), orientation="h", y=-0.22),
     margin=dict(l=8, r=8, t=10, b=10),
 )
-st.plotly_chart(fig_stacked, use_container_width=True)
+st.plotly_chart(fig_stacked, width='stretch')
 
 
 # SECTION 3 - Operational Risk
@@ -612,12 +612,12 @@ with col_sev:
             showarrow=False,
         )],
     )
-    st.plotly_chart(fig_sev, use_container_width=True)
+    st.plotly_chart(fig_sev, width='stretch')
 
     df_sev_display = df_sev[["delay_severity", "total_orders", "pct_total"]].copy()
     df_sev_display.columns = ["Severity", "Orders", "% Total"]
     st.dataframe(
-        df_sev_display, hide_index=True, use_container_width=True,
+        df_sev_display, hide_index=True, width='stretch',
         column_config={
             "% Total": st.column_config.ProgressColumn("% Total", min_value=0, max_value=100, format="%.1f%%"),
         }
@@ -691,7 +691,7 @@ with col_scatter:
         yaxis=styled_yaxis(title="Delay Rate (%)", ticksuffix="%"),
         margin=dict(l=12, r=12, t=16, b=12),
     )
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    st.plotly_chart(fig_scatter, width='stretch')
 
 
 # SECTION 4 - OD Lane Resilience
@@ -833,7 +833,7 @@ with col_heat:
         yaxis=dict(title="Origin",      tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), linecolor="#E5E7EB"),
         margin=dict(l=10, r=10, t=10, b=10),
     )
-    st.plotly_chart(fig_heat, use_container_width=True)
+    st.plotly_chart(fig_heat, width='stretch')
 
 # Route share distribution scatter
 st.markdown('<div class="section-label">Route concentration vs delay rate — bubble = orders volume</div>', unsafe_allow_html=True)
@@ -877,7 +877,7 @@ fig_scatter.update_layout(
     legend=dict(font=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1), orientation="h", y=-0.15),
     margin=dict(l=10, r=10, t=10, b=40),
 )
-st.plotly_chart(fig_scatter, use_container_width=True)
+st.plotly_chart(fig_scatter, width='stretch')
 
 # Detailed lane analysis
 st.markdown('<div class="section-label">Detailed Lane Analysis</div>', unsafe_allow_html=True)
@@ -952,7 +952,7 @@ if not lane_data.empty:
                     font=dict(family="IBM Plex Mono", size=10, color="#9CA3AF")
                 )
             )
-            st.plotly_chart(fig_lane_donut, use_container_width=True)
+            st.plotly_chart(fig_lane_donut, width='stretch')
 
     with col_info:
         st.markdown('<div class="section-label">Resilience Profile</div>', unsafe_allow_html=True)

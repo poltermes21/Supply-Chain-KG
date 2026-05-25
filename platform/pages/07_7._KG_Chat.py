@@ -132,7 +132,7 @@ with st.sidebar:
 
     if st.button(
         "🗑️ Clear conversation",
-        use_container_width=True,
+        width='stretch',
         disabled=is_generating,
     ):
         st.session_state.display_history = []

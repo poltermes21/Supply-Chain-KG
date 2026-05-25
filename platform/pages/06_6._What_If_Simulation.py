@@ -4,6 +4,7 @@ import pandas as pd
 from shared.connection import get_neo4j_driver
 from analysis.queriesv2.block6_what_if import Block6Queries
 from shared.ui_helpers import render_section_header
+from shared.pyvis_helpers import apply_pyvis_post_processing, render_pyvis_html
 
 st.set_page_config(page_title="What-If Scenarios", layout="wide")
 
@@ -77,6 +78,234 @@ def styled_yaxis(**kwargs):
     )
     d.update(kwargs)
     return d
+
+
+# Severity ranking — used to pick a node's color when it sits on multiple
+# affected lanes (worst status wins).
+_STATUS_SEVERITY = {"fully_blocked": 3, "primary_loss": 2, "partial_loss": 1}
+
+
+def _build_pyvis_route_shock(df_reroute, all_cities, status_palette):
+    """Network of affected OD lanes after a route blockade.
+
+    Nodes coloured by the worst shock status touching them, sized by the
+    total affected orders incident to the city. Edges are directional arrows
+    per affected lane, coloured by `shock_status`, dashed when fully blocked.
+    """
+    from pyvis.network import Network
+
+    net = Network(
+        height="500px", width="100%",
+        bgcolor="#0F1117", font_color="#F9FAFB",
+        directed=True, notebook=False, cdn_resources="remote",
+    )
+    net.set_options("""
+    {
+      "nodes": {
+        "borderWidth": 2, "borderWidthSelected": 3,
+        "font": {"size": 14, "face": "IBM Plex Sans", "color": "#F9FAFB"}
+      },
+      "edges": {
+        "smooth": {"enabled": true, "type": "dynamic", "roundness": 0.3},
+        "selectionWidth": 1.5
+      },
+      "physics": {
+        "barnesHut": {
+          "gravitationalConstant": -3000, "centralGravity": 0.3,
+          "springLength": 150, "springConstant": 0.05,
+          "damping": 0.2, "avoidOverlap": 0.45
+        },
+        "minVelocity": 0.6, "solver": "barnesHut",
+        "stabilization": {"enabled": true, "iterations": 200, "fit": true}
+      },
+      "interaction": {
+        "hover": true, "dragNodes": true, "zoomView": true,
+        "tooltipDelay": 80, "navigationButtons": true
+      }
+    }
+    """)
+
+    # Aggregate per-city: worst status touching it, total affected orders.
+    city_worst_status = {}     # city -> shock_status
+    city_affected_orders = {}  # city -> int
+    city_lane_count = {}       # city -> int
+    if not df_reroute.empty:
+        for _, r in df_reroute.iterrows():
+            for endpoint in (r["origin"], r["destination"]):
+                cur = city_worst_status.get(endpoint)
+                if cur is None or _STATUS_SEVERITY[r["shock_status"]] > _STATUS_SEVERITY[cur]:
+                    city_worst_status[endpoint] = r["shock_status"]
+                city_affected_orders[endpoint] = (
+                    city_affected_orders.get(endpoint, 0) + int(r["affected_orders"])
+                )
+                city_lane_count[endpoint] = city_lane_count.get(endpoint, 0) + 1
+
+    max_city_orders = max(city_affected_orders.values(), default=1) or 1
+
+    for city in all_cities:
+        status = city_worst_status.get(city)
+        affected = city_affected_orders.get(city, 0)
+        lanes = city_lane_count.get(city, 0)
+        if status is None:
+            color = "#3D4151"  # untouched: dim grey
+            size = 14
+            status_label = "Unaffected"
+        else:
+            color = status_palette[status]["color"]
+            size = 18 + 26 * (affected / max_city_orders)
+            status_label = status_palette[status]["label"]
+        net.add_node(
+            city, label=city,
+            color={"background": color, "border": "#0F1117",
+                   "highlight": {"background": color, "border": "#F9FAFB"}},
+            size=size,
+            title=(f"<b>{city}</b><br>"
+                   f"Worst status: {status_label}<br>"
+                   f"Affected orders: {affected:,}<br>"
+                   f"Affected lanes: {lanes}"),
+        )
+
+    if not df_reroute.empty:
+        max_orders = int(df_reroute["affected_orders"].max()) or 1
+        for _, r in df_reroute.iterrows():
+            u, v = r["origin"], r["destination"]
+            status = r["shock_status"]
+            color = status_palette[status]["color"]
+            orders = int(r["affected_orders"])
+            width = 1.5 + 4 * (orders / max_orders)
+            is_severed = status == "fully_blocked"
+            net.add_edge(
+                u, v,
+                color={"color": color, "hover": color, "highlight": color},
+                width=width,
+                dashes=is_severed,
+                arrows={"to": {"enabled": True, "scaleFactor": 0.8}},
+                title=(f"<b>{u} &rarr; {v}</b><br>"
+                       f"Status: {status_palette[status]['label']}<br>"
+                       f"Affected orders: {orders:,}<br>"
+                       f"Surviving routes: {int(r['surviving_route_count'])} / "
+                       f"{int(r['total_routes'])}<br>"
+                       f"Blocked: {float(r['blocked_pct']):.0f}%"),
+                physics=True,
+            )
+
+    return apply_pyvis_post_processing(net.generate_html(notebook=False))
+
+
+def _build_pyvis_node_failure(df_global, blocked_cities, all_cities):
+    """Network of severed lanes after one or more node failures.
+
+    Failed cities are rendered solid red with a dashed border. Cities sitting
+    on a severed lane are tinted red proportionally to the affected order
+    volume; the rest stay dim grey. Every severed lane is a dashed red arrow
+    whose width is proportional to its affected orders.
+    """
+    from pyvis.network import Network
+
+    net = Network(
+        height="500px", width="100%",
+        bgcolor="#0F1117", font_color="#F9FAFB",
+        directed=True, notebook=False, cdn_resources="remote",
+    )
+    net.set_options("""
+    {
+      "nodes": {
+        "borderWidth": 2, "borderWidthSelected": 3,
+        "font": {"size": 14, "face": "IBM Plex Sans", "color": "#F9FAFB"}
+      },
+      "edges": {
+        "smooth": {"enabled": true, "type": "dynamic", "roundness": 0.3},
+        "selectionWidth": 1.5
+      },
+      "physics": {
+        "barnesHut": {
+          "gravitationalConstant": -3000, "centralGravity": 0.3,
+          "springLength": 150, "springConstant": 0.05,
+          "damping": 0.2, "avoidOverlap": 0.45
+        },
+        "minVelocity": 0.6, "solver": "barnesHut",
+        "stabilization": {"enabled": true, "iterations": 200, "fit": true}
+      },
+      "interaction": {
+        "hover": true, "dragNodes": true, "zoomView": true,
+        "tooltipDelay": 80, "navigationButtons": true
+      }
+    }
+    """)
+
+    blocked_set = set(blocked_cities or [])
+
+    # Per-city affected orders (excluding the failed cities themselves)
+    city_affected = {}
+    if not df_global.empty:
+        for _, r in df_global.iterrows():
+            for endpoint in (r["origin"], r["destination"]):
+                if endpoint in blocked_set:
+                    continue
+                city_affected[endpoint] = (
+                    city_affected.get(endpoint, 0) + int(r["affected_orders"])
+                )
+    max_aff = max(city_affected.values(), default=1) or 1
+
+    for city in all_cities:
+        if city in blocked_set:
+            net.add_node(
+                city, label=city,
+                color={"background": "#7F1D1D", "border": "#EF4444",
+                       "highlight": {"background": "#7F1D1D", "border": "#FCA5A5"}},
+                size=32,
+                borderWidth=3,
+                shapeProperties={"borderDashes": [4, 4]},
+                title=(f"<b>{city}</b><br><b style='color:#EF4444'>FAILED NODE</b><br>"
+                       f"All incident lanes are severed."),
+            )
+        else:
+            affected = city_affected.get(city, 0)
+            if affected > 0:
+                color = "#F59E0B"  # downstream impact
+                size = 18 + 22 * (affected / max_aff)
+                status = "Downstream impact"
+            else:
+                color = "#3D4151"
+                size = 14
+                status = "Unaffected"
+            net.add_node(
+                city, label=city,
+                color={"background": color, "border": "#0F1117",
+                       "highlight": {"background": color, "border": "#F9FAFB"}},
+                size=size,
+                title=(f"<b>{city}</b><br>"
+                       f"Status: {status}<br>"
+                       f"Affected orders (incident): {affected:,}"),
+            )
+
+    if not df_global.empty:
+        max_orders = int(df_global["affected_orders"].max()) or 1
+        for _, r in df_global.iterrows():
+            u, v = r["origin"], r["destination"]
+            orders = int(r["affected_orders"])
+            width = 1.5 + 4 * (orders / max_orders)
+            risk = float(r.get("risk_score", 0) or 0)
+            cost = float(r.get("avg_cost", 0) or 0)
+            lt = float(r.get("avg_lead_time", 0) or 0)
+            net.add_edge(
+                u, v,
+                color={"color": "rgba(239,68,68,0.85)",
+                       "hover": "#EF4444",
+                       "highlight": "#FCA5A5"},
+                width=width,
+                dashes=True,
+                arrows={"to": {"enabled": True, "scaleFactor": 0.8}},
+                title=(f"<b>{u} &rarr; {v}</b><br>"
+                       f"<b style='color:#EF4444'>SEVERED</b><br>"
+                       f"Affected orders: {orders:,}<br>"
+                       f"Risk score: {risk:.4f}<br>"
+                       f"Avg cost: ${cost:,.0f}<br>"
+                       f"Avg lead time: {lt:.1f}d"),
+                physics=True,
+            )
+
+    return apply_pyvis_post_processing(net.generate_html(notebook=False))
 
 st.markdown("""
 <style>
@@ -210,16 +439,16 @@ with tab_route:
     pre_c1, pre_c2, pre_c3, pre_c4 = st.columns(4)
     preset_route = None
     with pre_c1:
-        if st.button("Suez Blockage", use_container_width=True):
+        if st.button("Suez Blockage", width='stretch'):
             preset_route = ["Suez"]
     with pre_c2:
-        if st.button("Suez + Intra-Asia", use_container_width=True):
+        if st.button("Suez + Intra-Asia", width='stretch'):
             preset_route = ["Suez", "Intra-Asia"]
     with pre_c3:
-        if st.button("Pacific + Atlantic", use_container_width=True):
+        if st.button("Pacific + Atlantic", width='stretch'):
             preset_route = ["Pacific", "Atlantic"]
     with pre_c4:
-        if st.button("All routes", use_container_width=True):
+        if st.button("All routes", width='stretch'):
             preset_route = ALL_ROUTES
 
     if preset_route is not None:
@@ -233,7 +462,7 @@ with tab_route:
         default=default_routes,
     )
 
-    run_route = st.button("▶ Run Route Shock", type="primary", use_container_width=False)
+    run_route = st.button("▶ Run Route Shock", type="primary", width='content')
 
     # Only query and store results when button is pressed
     if run_route:
@@ -295,19 +524,14 @@ with tab_route:
 
             st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
-            # Reroutability Sankey + stranded table
+            # Reroutability network + stranded table
             if not df_reroute.empty:
                 col_san, col_strand = st.columns([3, 2])
 
-                def hex_to_rgba(hex_color: str, alpha: float = 0.53) -> str:
-                    hex_color = hex_color.lstrip("#")
-                    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-                    return f"rgba({r},{g},{b},{alpha})"
-
                 with col_san:
-                    st.markdown('<div class="section-label">Reroutability — Sankey by shock status</div>',
+                    st.markdown('<div class="section-label">Reroutability — affected network</div>',
                                 unsafe_allow_html=True)
-                    
+
                     # Legend
                     leg_cols = st.columns(len(SHOCK_STATUS))
                     for i, (key, meta) in enumerate(SHOCK_STATUS.items()):
@@ -324,60 +548,22 @@ with tab_route:
                                 </div>
                             </div>""", unsafe_allow_html=True)
 
-                    status_nodes = list(SHOCK_STATUS.keys())
-                    city_nodes   = sorted(
-                        set(df_reroute["origin"].tolist()) | set(df_reroute["destination"].tolist())
-                    )
-                    all_nodes  = status_nodes + city_nodes
-                    node_map   = {n: i for i, n in enumerate(all_nodes)}
-                    node_colors = (
-                        [SHOCK_STATUS[s]["color"] for s in status_nodes] +
-                        ["#3B82F6"] * len(city_nodes)
-                    )
-
-                    agg_status_origin = (
-                        df_reroute.groupby(["shock_status", "origin"])["affected_orders"]
-                        .sum().reset_index()
-                    )
-                    agg_od = df_reroute[["origin", "destination", "affected_orders"]].copy()
-
-                    sources, targets, values, colors_link = [], [], [], []
-                    for _, r in agg_status_origin.iterrows():
-                        sources.append(node_map[r["shock_status"]])
-                        targets.append(node_map[r["origin"]])
-                        values.append(int(r["affected_orders"]))
-                        colors_link.append(hex_to_rgba(SHOCK_STATUS.get(r["shock_status"], {}).get("color", "#6B7280")))
-
-                    for _, r in agg_od.iterrows():
-                        sources.append(node_map[r["origin"]])
-                        targets.append(node_map[r["destination"]])
-                        values.append(int(r["affected_orders"]))
-                        colors_link.append(hex_to_rgba("#3B82F6"))
-
-                    fig_sankey = go.Figure(go.Sankey(
-                        arrangement="snap",
-                        node=dict(
-                            pad=16, thickness=20,
-                            label=all_nodes,
-                            color=node_colors,
-                            line=dict(color="#0F1117", width=0.5),
-                        ),
-                        link=dict(
-                            source=sources, target=targets,
-                            value=values, color=colors_link,
-                        ),
-                    ))
-                    fig_sankey.update_layout(
-                        **base_layout(height=380),
-                        margin=dict(l=12, r=12, t=16, b=12),
-                    )
-                    st.plotly_chart(fig_sankey, use_container_width=True)
-                    st.caption("""
-                        **Fully blocked**: All routes blocked (no alternatives).
-                        **Primary loss**: Main route blocked, rerouting to secondary alternatives required.
-                        **Partial loss**: Only seconadary routes blocked, rerouting is still required.
-                        """
-                    )
+                    try:
+                        route_html = _build_pyvis_route_shock(
+                            df_reroute, ALL_CITIES, SHOCK_STATUS,
+                        )
+                        render_pyvis_html(route_html, height=520)
+                        st.caption(
+                            "Arrows = affected OD lanes · colored by shock status · "
+                            "width ∝ affected orders · dashed = no surviving route. "
+                            "Node color = worst status touching the city · "
+                            "size ∝ total affected orders. "
+                            "Drag · Hold Ctrl/⌘ + scroll to zoom · Hover for details."
+                        )
+                    except ModuleNotFoundError:
+                        st.warning("PyVis is not installed. Run `pip install pyvis` to enable this view.")
+                    except Exception as e:
+                        st.warning(f"Could not render network: {e}")
 
                 with col_strand:
                     st.markdown('<div class="section-label">Lanes by shock status</div>',
@@ -424,7 +610,7 @@ with tab_route:
                         )
 
                     st.dataframe(
-                        df_rr_disp, hide_index=True, use_container_width=True,
+                        df_rr_disp, hide_index=True, width='stretch',
                         column_config={
                             "Blocked Routes %": st.column_config.ProgressColumn(
                                 "Blocked Routes %", min_value=0, max_value=100, format="%.1f%%"),
@@ -492,7 +678,7 @@ with tab_route:
 
                     st.dataframe(
                         df_pen_disp.sort_values("Orders", ascending=False),
-                        hide_index=True, use_container_width=True,
+                        hide_index=True, width='stretch',
                         column_config={
                             "Orders": st.column_config.NumberColumn("Orders", format="%d"),
                             "Cost Δ (USD)": st.column_config.NumberColumn("Cost Δ ($)", format="%.2f"),
@@ -518,11 +704,11 @@ with tab_node:
     np_c1, np_c2, np_c3 = st.columns(3)
     preset_cities = None
     with np_c1:
-        if st.button("Shanghai",                use_container_width=True): preset_cities = ["Shanghai"]
+        if st.button("Shanghai",                width='stretch'): preset_cities = ["Shanghai"]
     with np_c2:
-        if st.button("Shanghai + Santos",       use_container_width=True): preset_cities = ["Shanghai", "Santos"]
+        if st.button("Shanghai + Santos",       width='stretch'): preset_cities = ["Shanghai", "Santos"]
     with np_c3:
-        if st.button("Shanghai + Rotterdam",    use_container_width=True): preset_cities = ['Shanghai', 'Rotterdam']
+        if st.button("Shanghai + Rotterdam",    width='stretch'): preset_cities = ['Shanghai', 'Rotterdam']
 
     if preset_cities is not None:
         st.session_state["blocked_cities"] = preset_cities
@@ -602,8 +788,28 @@ with tab_node:
                     </div>
                     """, unsafe_allow_html=True)
 
-        # Global impact bar chart
+        # Global impact network + bar chart
         if not df_global.empty:
+            st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
+            st.markdown('<div class="section-label">Severed network — affected lanes</div>',
+                        unsafe_allow_html=True)
+
+            try:
+                node_html = _build_pyvis_node_failure(
+                    df_global, displayed_cities, ALL_CITIES,
+                )
+                render_pyvis_html(node_html, height=520)
+                st.caption(
+                    "Failed cities are rendered with a dashed red border · "
+                    "Amber nodes = cities with downstream impact (size ∝ affected orders) · "
+                    "Dashed red arrows = severed lanes (width ∝ affected orders). "
+                    "Drag · Hold Ctrl/⌘ + scroll to zoom · Hover for risk / cost / lead time."
+                )
+            except ModuleNotFoundError:
+                st.warning("PyVis is not installed. Run `pip install pyvis` to enable this view.")
+            except Exception as e:
+                st.warning(f"Could not render network: {e}")
+
             st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
             st.markdown('<div class="section-label">Global impact — lanes affected by the failure</div>',
                         unsafe_allow_html=True)
@@ -646,7 +852,7 @@ with tab_node:
                 yaxis=styled_yaxis(showgrid=False),
                 margin=dict(l=12, r=160, t=16, b=12),
             )
-            st.plotly_chart(fig_node, use_container_width=True)
+            st.plotly_chart(fig_node, width='stretch')
             st.caption(
                 "Lanes by affected volume. Color = average cost per lane (red = higher cost). "
                 "Includes all lanes where the failed city is origin or destination."
@@ -802,7 +1008,7 @@ with tab_path:
             st.dataframe(
                 pd.DataFrame(summary_rows),
                 hide_index=True,
-                use_container_width=True,
+                width='stretch',
             )
             st.caption(
                 "Each row represents the optimal path for a different criterion. "

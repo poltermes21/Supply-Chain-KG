@@ -353,7 +353,7 @@ fig_corr.update_yaxes(
     secondary_y=True,
 )
 fig_corr.update_xaxes(**styled_xaxis())
-st.plotly_chart(fig_corr, use_container_width=True)
+st.plotly_chart(fig_corr, width='stretch')
 st.caption("Bars (right axis) show the average risk score per level. Lines (left axis) validate that disruption and delay increase monotonically with assigned risk.")
 
 
@@ -416,7 +416,7 @@ def stacked_risk_bar(df, dimension_col, title_caption):
         gridcolor=GRID_COLOR, zeroline=False,
         secondary_y=True,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     st.caption(title_caption)
 
 
@@ -568,7 +568,7 @@ fig_mirror.update_annotations(
     font=dict(family=FONT_SANS, size=11, color=AXIS_COLOR)
 )
 
-st.plotly_chart(fig_mirror, use_container_width=True)
+st.plotly_chart(fig_mirror, width='stretch')
 st.caption(
     "Cities present on both sides (e.g., Shanghai) show their risk profile as origin (left) and destination (right). "
     "Solid bars = outbound, translucent = inbound. Red = geopolitical risk, blue = weather risk."
@@ -726,7 +726,7 @@ if joint_ready is not None:
             yaxis=styled_yaxis(showgrid=False),
             margin=dict(l=12, r=120, t=12, b=12),
         )
-        st.plotly_chart(fig_joint, use_container_width=True)
+        st.plotly_chart(fig_joint, width='stretch')
         st.caption("Routes with simultaneous exposure to geopolitical and weather risk above the threshold. Color = combined risk score (red = higher).")
 
 
@@ -934,7 +934,7 @@ fig_lanes.update_layout(
     margin=dict(l=12, r=80, t=16, b=12),
 )
 
-st.plotly_chart(fig_lanes, use_container_width=True)
+st.plotly_chart(fig_lanes, width='stretch')
 
 st.caption(
     f"Top {top_n} highlighted lanes by {metric_labels[metric]}. "
