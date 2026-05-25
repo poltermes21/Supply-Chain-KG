@@ -735,7 +735,7 @@ if joint_ready is not None:
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 render_section_header("5 · Critical lanes by risk and volume")
 
-# — Controls —
+# Controls
 ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1, 2, 2])
 
 metric_labels = {
