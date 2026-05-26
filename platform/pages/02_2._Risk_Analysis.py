@@ -131,15 +131,26 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
     font-size: 0.9rem; font-weight: 600; color: #D1D5DB;
 }
 .risk-metrics {
-    display: flex; gap: 1rem; margin-bottom: 0.6rem;
+    display: flex; gap: 0.6rem; margin-bottom: 0.6rem;
+    flex-wrap: wrap;
 }
 .risk-metric {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;          /* allow shrinking below content size — stops the value from being cropped */
 }
 .risk-metric-val {
     font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 1.1rem; font-weight: 700; color: #F9FAFB;
+    font-size: clamp(0.85rem, 1.4vw, 1.1rem);   /* shrinks gracefully on narrow screens */
+    font-weight: 700; color: #F9FAFB;
     line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@media (max-width: 1400px) {
+    /* On smaller laptops, stack the 3 metrics 2 + 1 instead of cramming a row of 3. */
+    .risk-metric { flex: 1 1 45%; }
+    .risk-metric-val { font-size: 1rem; }
 }
 .risk-metric-lbl {
     font-family: 'IBM Plex Mono', monospace;
@@ -353,7 +364,7 @@ fig_corr.update_yaxes(
     secondary_y=True,
 )
 fig_corr.update_xaxes(**styled_xaxis())
-st.plotly_chart(fig_corr, use_container_width=True)
+st.plotly_chart(fig_corr, width='stretch')
 st.caption("Bars (right axis) show the average risk score per level. Lines (left axis) validate that disruption and delay increase monotonically with assigned risk.")
 
 
@@ -416,7 +427,7 @@ def stacked_risk_bar(df, dimension_col, title_caption):
         gridcolor=GRID_COLOR, zeroline=False,
         secondary_y=True,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     st.caption(title_caption)
 
 
@@ -568,7 +579,7 @@ fig_mirror.update_annotations(
     font=dict(family=FONT_SANS, size=11, color=AXIS_COLOR)
 )
 
-st.plotly_chart(fig_mirror, use_container_width=True)
+st.plotly_chart(fig_mirror, width='stretch')
 st.caption(
     "Cities present on both sides (e.g., Shanghai) show their risk profile as origin (left) and destination (right). "
     "Solid bars = outbound, translucent = inbound. Red = geopolitical risk, blue = weather risk."
@@ -726,7 +737,7 @@ if joint_ready is not None:
             yaxis=styled_yaxis(showgrid=False),
             margin=dict(l=12, r=120, t=12, b=12),
         )
-        st.plotly_chart(fig_joint, use_container_width=True)
+        st.plotly_chart(fig_joint, width='stretch')
         st.caption("Routes with simultaneous exposure to geopolitical and weather risk above the threshold. Color = combined risk score (red = higher).")
 
 
@@ -934,7 +945,7 @@ fig_lanes.update_layout(
     margin=dict(l=12, r=80, t=16, b=12),
 )
 
-st.plotly_chart(fig_lanes, use_container_width=True)
+st.plotly_chart(fig_lanes, width='stretch')
 
 st.caption(
     f"Top {top_n} highlighted lanes by {metric_labels[metric]}. "
