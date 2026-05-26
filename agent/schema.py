@@ -89,7 +89,7 @@ KG_SCHEMA_PROMPT = """
 
 **Country** (11 nodes) — unique constraint on `id`
   - id                        String   — ISO country code (e.g. "US", "CN", "DE")
-  - name              String   — full country name (e.g. "United States")
+  - name                      String   — full country name (e.g. "United States")
   - region                    String   — macro region grouping:"Asia" | "Europe" | "Americas"
 
 **Route** (5 nodes) — unique constraint on `id`
@@ -160,7 +160,7 @@ KG_SCHEMA_PROMPT = """
 
 // Route → City (geographic coverage)
 (:Route)-[:CONNECTS]->(:City)
-  - direction  String   — role of the city, "origin" | "destination
+  - role       String   — city role on this route: "origin" | "destination" | "both"
   - from       String   — Route.id
   - to         String   — City.id
 
@@ -194,8 +194,7 @@ KG_SCHEMA_PROMPT = """
   - route_share             String       — JSON map of route → share % ("{"Suez": 0.6828, "CoGH": 0.3172}")
   - from                    String       — City.id
   - to                      String       — City.id
-
----
+  
 
 ### Example Queries
 
