@@ -871,11 +871,16 @@ for profile, grp in df_od.groupby("redundancy_profile"):
     ))
 
 fig_scatter.update_layout(
-    **base_layout(height=300),
+    **base_layout(height=340),
     xaxis=dict(title="Route Concentration (HHI)", tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), gridcolor="#F3F4F6"),
     yaxis=dict(title="Delay Rate (%)",            tickfont=dict(size=10, family=FONT_SANS, color=TEXT_COLOR1), gridcolor="#F3F4F6"),
-    legend=dict(font=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1), orientation="h", y=-0.15),
-    margin=dict(l=10, r=10, t=10, b=40),
+    legend=dict(
+        font=dict(size=9, family=FONT_SANS, color=TEXT_COLOR1),
+        orientation="h",
+        y=-0.32, yanchor="top",
+        x=0.5,  xanchor="center",
+    ),
+    margin=dict(l=10, r=10, t=10, b=90),
 )
 st.plotly_chart(fig_scatter, width='stretch')
 

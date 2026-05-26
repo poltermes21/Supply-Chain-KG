@@ -203,6 +203,8 @@ def _build_pyvis_route_shock(df_reroute, df_all_flow, all_cities, status_palette
             primary = r.get("primary_route") or "—"
             blocked_str = ", ".join(blocked_list) if len(blocked_list) else "—"
             surviving_str = ", ".join(surviving_list) if len(surviving_list) else "none"
+            lane_total = int(r.get("lane_total_orders", orders))
+            share_pct = float(r.get("affected_order_share_pct", 0))
             net.add_edge(
                 u, v,
                 color={"color": color, "hover": color, "highlight": color},
@@ -211,11 +213,11 @@ def _build_pyvis_route_shock(df_reroute, df_all_flow, all_cities, status_palette
                 arrows={"to": {"enabled": True, "scaleFactor": 0.8}},
                 title=(f"<b>{u} &rarr; {v}</b><br>"
                        f"Status: {status_palette[status]['label']}<br>"
-                       f"Affected orders: {orders:,}<br>"
+                       f"Affected orders: {orders:,} of {lane_total:,} "
+                       f"({share_pct:.1f}% of lane volume)<br>"
                        f"Primary route: {primary}<br>"
                        f"Blocked routes: {blocked_str}<br>"
-                       f"Surviving routes: {surviving_str}<br>"
-                       f"Blocked share: {float(r['blocked_pct']):.0f}%"),
+                       f"Surviving routes: {surviving_str}"),
                 physics=True,
             )
 
@@ -787,15 +789,16 @@ with tab_node:
             st.session_state["node_blocked"] = []
         else:
             with st.spinner("Simulating node failure..."):
-                df_local  = Block6Queries.node_failure_local_impact(driver, blocked_cities)
-                df_global = Block6Queries.node_failure_global_impact(driver, blocked_cities)
-                df_all_flow_n = Block6Queries.all_city_flow(driver)
-            st.session_state["node_results"] = (df_local, df_global, df_all_flow_n)
+                df_local       = Block6Queries.node_failure_local_impact(driver, blocked_cities)
+                df_global      = Block6Queries.node_failure_global_impact(driver, blocked_cities)
+                df_substitute  = Block6Queries.node_failure_lane_substitution(driver, blocked_cities)
+                df_all_flow_n  = Block6Queries.all_city_flow(driver)
+            st.session_state["node_results"] = (df_local, df_global, df_substitute, df_all_flow_n)
             st.session_state["node_blocked"] = blocked_cities
 
     # Render stored results (only if they exist)
     if st.session_state.get("node_results") is not None:
-        df_local, df_global, df_all_flow_n = st.session_state["node_results"]
+        df_local, df_global, df_substitute, df_all_flow_n = st.session_state["node_results"]
         displayed_cities = st.session_state.get("node_blocked", blocked_cities)
 
         if df_local.empty:
@@ -917,6 +920,115 @@ with tab_node:
                 "Includes all lanes where the failed city is origin or destination."
             )
 
+        # Substitute lanes — by product
+        if df_substitute is not None and not df_substitute.empty:
+            st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
+            st.markdown('<div class="section-label">Substitute lanes — by product</div>',
+                        unsafe_allow_html=True)
+            st.markdown(
+                "For each severed lane and product, candidate cities that already have observed history "
+                "shipping or receiving the same product to/from the surviving endpoint. "
+                "Cost and lead-time deltas are computed against the failed lane's averages.",
+                unsafe_allow_html=True,
+            )
+
+            # Filters
+            sf1, sf2, sf3, sf4 = st.columns(4)
+            with sf1:
+                failed_options = ["All"] + sorted(df_substitute["failed_city"].unique().tolist())
+                sub_failed = st.selectbox("Failed city", failed_options, key="sub_failed")
+            with sf2:
+                surv_options = ["All"] + sorted(df_substitute["surviving_city"].unique().tolist())
+                sub_surv = st.selectbox("Surviving endpoint", surv_options, key="sub_surv")
+            with sf3:
+                prod_options = ["All"] + sorted(df_substitute["product"].unique().tolist())
+                sub_prod = st.selectbox("Product", prod_options, key="sub_prod")
+            with sf4:
+                feas_options = ["All", "Reroutable", "No observed alternative"]
+                sub_feas = st.selectbox("Feasibility", feas_options, key="sub_feas")
+
+            df_sub_filtered = df_substitute.copy()
+            if sub_failed != "All":
+                df_sub_filtered = df_sub_filtered[df_sub_filtered["failed_city"] == sub_failed]
+            if sub_surv != "All":
+                df_sub_filtered = df_sub_filtered[df_sub_filtered["surviving_city"] == sub_surv]
+            if sub_prod != "All":
+                df_sub_filtered = df_sub_filtered[df_sub_filtered["product"] == sub_prod]
+            if sub_feas == "Reroutable":
+                df_sub_filtered = df_sub_filtered[df_sub_filtered["feasibility"] == "reroutable_from_history"]
+            elif sub_feas == "No observed alternative":
+                df_sub_filtered = df_sub_filtered[df_sub_filtered["feasibility"] == "no_observed_alternative"]
+
+            # Alert: how many (lane, product) pairs have no alternative?
+            no_alt_pairs = (
+                df_sub_filtered[df_sub_filtered["feasibility"] == "no_observed_alternative"]
+                [["failed_city", "surviving_city", "product"]]
+                .drop_duplicates()
+            )
+            if len(no_alt_pairs) > 0:
+                st.markdown(f"""
+                <div class="callout-critical">
+                    <strong>⚠ {len(no_alt_pairs)} (lane × product) pair{"s" if len(no_alt_pairs) > 1 else ""}
+                    with no observed alternative</strong><br>
+                    No order history exists for any city shipping the same product to/from the surviving endpoint.
+                    The real cost of substitution is unknown until a new lane is activated.
+                </div>""", unsafe_allow_html=True)
+
+            if df_sub_filtered.empty:
+                st.info("No rows match the selected filters.")
+            else:
+                # Build a friendly lane label using failed_role to keep direction correct.
+                def _lane_label(r):
+                    if r["failed_role"] == "origin":
+                        return f"{r['failed_city']} → {r['surviving_city']}"
+                    return f"{r['surviving_city']} → {r['failed_city']}"
+
+                def _sub_lane_label(r):
+                    if r["substitute_city"] is None or (isinstance(r["substitute_city"], float) and pd.isna(r["substitute_city"])):
+                        return "—"
+                    if r["failed_role"] == "origin":
+                        return f"{r['substitute_city']} → {r['surviving_city']}"
+                    return f"{r['surviving_city']} → {r['substitute_city']}"
+
+                df_disp = df_sub_filtered.copy()
+                df_disp["Severed lane"] = df_disp.apply(_lane_label, axis=1)
+                df_disp["Substitute lane"] = df_disp.apply(_sub_lane_label, axis=1)
+                df_disp["Feasibility"] = df_disp["feasibility"].replace({
+                    "reroutable_from_history": "Reroutable",
+                    "no_observed_alternative": "No observed alternative",
+                })
+
+                df_disp = df_disp[[
+                    "Severed lane", "product", "affected_orders",
+                    "Substitute lane", "sub_history_orders",
+                    "cost_delta_usd", "lead_delta_days", "Feasibility",
+                ]].rename(columns={
+                    "product":             "Product",
+                    "affected_orders":     "Affected orders",
+                    "sub_history_orders":  "Substitute history",
+                    "cost_delta_usd":      "Cost Δ (USD)",
+                    "lead_delta_days":     "Lead Time Δ (d)",
+                })
+
+                df_disp = df_disp.sort_values(
+                    by=["Affected orders", "Severed lane", "Product"],
+                    ascending=[False, True, True],
+                )
+
+                st.dataframe(
+                    df_disp, hide_index=True, width='stretch',
+                    column_config={
+                        "Affected orders":    st.column_config.NumberColumn(format="%d"),
+                        "Substitute history": st.column_config.NumberColumn(format="%d"),
+                        "Cost Δ (USD)":       st.column_config.NumberColumn(format="%.2f"),
+                        "Lead Time Δ (d)":    st.column_config.NumberColumn(format="%.2f"),
+                    },
+                )
+                st.caption(
+                    "Cost Δ and Lead Time Δ are computed from observed orders on the substitute lane. "
+                    "Positive values = substitute is more expensive / slower than the failed lane."
+                )
+
     elif run_node and not blocked_cities:
         st.info("Please select one or more cities to simulate a blockade.")
 
@@ -927,8 +1039,8 @@ with tab_node:
 with tab_path:
     render_section_header("Emergency Path Optimization")
     st.markdown(
-        "Find the optimal path between two network nodes via Dijkstra over the `CITY_FLOW` graph. "
-        "Compare all 3 optimization criteria in parallel."
+        "Find the best route between two cities — by lead time, cost or risk. "
+        "All three criteria are compared side by side."
     )
 
     # Controls

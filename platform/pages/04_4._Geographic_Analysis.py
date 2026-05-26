@@ -583,71 +583,162 @@ if not df_louvain.empty:
 
 st.markdown("")
 
-# Community cards + search bar
-col_cards, col_search = st.columns([2, 1])
+# Pre-compute per-community stats used by the cards and the comparison chart.
+community_stats = {}
+if not df_comm.empty:
+    for cid in sorted(df_comm["community_id"].unique()):
+        cities = sorted(df_comm[df_comm["community_id"] == cid]["city"].tolist())
+        if not df_intra_od_pairs.empty:
+            df_c = df_intra_od_pairs[df_intra_od_pairs["community_id"] == cid]
+            internal_lanes  = int(len(df_c))
+            internal_orders = int(df_c["orders"].sum()) if not df_c.empty else 0
+        else:
+            internal_lanes  = 0
+            internal_orders = 0
+        if not df_intra_summary.empty:
+            sr = df_intra_summary[df_intra_summary["community_id"] == cid]
+            if not sr.empty:
+                avg_risk  = float(sr.iloc[0].get("avg_risk_score", 0) or 0)
+                avg_delay = float(sr.iloc[0].get("avg_delay_rate_pct", 0) or 0)
+                avg_conc  = float(sr.iloc[0].get("avg_route_concentration", 0) or 0)
+            else:
+                avg_risk = avg_delay = avg_conc = 0.0
+        else:
+            avg_risk = avg_delay = avg_conc = 0.0
+        community_stats[cid] = {
+            "cities":          cities,
+            "n_cities":        len(cities),
+            "internal_lanes":  internal_lanes,
+            "internal_orders": internal_orders,
+            "avg_risk":        avg_risk,
+            "avg_delay":       avg_delay,
+            "avg_conc":        avg_conc,
+        }
 
-with col_cards:
-    st.markdown('<div class="section-label">Community composition</div>', unsafe_allow_html=True)
-    if not df_comm.empty:
-        for cid in sorted(df_comm["community_id"].unique()):
-            cities = sorted(df_comm[df_comm["community_id"] == cid]["city"].tolist())
-            color  = comm_color_map.get(cid, "#6B7280")
-            bg_hex = color + "18"
+# Search bar — full width, horizontal result chips below
+st.markdown('<div class="section-label">Find a city → community</div>', unsafe_allow_html=True)
+search = st.text_input(
+    "Search city",
+    placeholder="Type a city to see its community (e.g. Shanghai, Rotterdam)",
+    label_visibility="collapsed",
+    key="community_city_search",
+)
+if search.strip() and not df_comm.empty:
+    matches = df_comm[df_comm["city"].str.lower().str.contains(search.strip().lower())]
+    if matches.empty:
+        st.markdown(
+            f'<div style="color:#6B7280;font-size:0.85rem;margin-top:0.4rem">'
+            f'No results for "<b>{search}</b>"</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        result_cols = st.columns(min(len(matches), 5))
+        for i, (_, mrow) in enumerate(matches.iterrows()):
+            cid = mrow["community_id"]
+            color = comm_color_map.get(cid, "#6B7280")
+            with result_cols[i % len(result_cols)]:
+                st.markdown(f"""
+                <div style="background:#1A1D27;border:1px solid #2A2D3A;
+                            border-left:3px solid {color};border-radius:6px;
+                            padding:0.55rem 0.85rem;margin-bottom:0.4rem">
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:{color}">
+                        Community {cid}
+                    </div>
+                    <div style="font-size:0.95rem;font-weight:700;color:#F9FAFB;
+                                font-family:'IBM Plex Sans',sans-serif">
+                        {mrow['city']}
+                    </div>
+                </div>""", unsafe_allow_html=True)
 
-            tags_html = "".join(
-                f'<span class="city-tag" style="background:{color}22;color:{color}">{c}</span>'
-                for c in cities
-            )
+# Composition grid — one card per community, side by side
+st.markdown(
+    '<div class="section-label" style="margin-top:1rem">Community composition</div>',
+    unsafe_allow_html=True,
+)
+if community_stats:
+    sorted_cids = sorted(community_stats.keys())
+    card_cols = st.columns(len(sorted_cids))
+    for col, cid in zip(card_cols, sorted_cids):
+        stats = community_stats[cid]
+        color = comm_color_map.get(cid, "#6B7280")
+        bg_hex = color + "18"
+        tags_html = "".join(
+            f'<span class="city-tag" style="background:{color}22;color:{color}">{c}</span>'
+            for c in stats["cities"]
+        )
+        with col:
             st.markdown(f"""
             <div class="community-card" style="border-left-color:{color};background:{bg_hex}">
                 <div class="community-card-title" style="color:{color}">
                     Community {cid}
                     <span style="font-size:0.65rem;color:#6B7280;margin-left:0.5rem">
-                        {len(cities)} {'city' if len(cities)==1 else 'cities'}
+                        {stats['n_cities']} {'city' if stats['n_cities']==1 else 'cities'}
                     </span>
                 </div>
                 <div class="city-tags">{tags_html}</div>
+                <div style="display:flex;gap:0.9rem;margin-top:0.55rem;
+                            font-family:'IBM Plex Mono',monospace;font-size:0.65rem">
+                    <div>
+                        <span style="color:#6B7280">LANES</span>
+                        <span style="color:{color};font-weight:700">&nbsp;{stats['internal_lanes']}</span>
+                    </div>
+                    <div>
+                        <span style="color:#6B7280">ORDERS</span>
+                        <span style="color:{color};font-weight:700">&nbsp;{stats['internal_orders']:,}</span>
+                    </div>
+                </div>
             </div>
             """, unsafe_allow_html=True)
 
-with col_search:
-    st.markdown('<div class="section-label">Cerca de ciutat → comunitat</div>', unsafe_allow_html=True)
-    search = st.text_input(
-        "Search city",
-        placeholder="Ex: Shanghai, Rotterdam...",
-        label_visibility="collapsed",
+# Comparison chart — communities ranked by a chosen metric
+if community_stats:
+    st.markdown(
+        '<div class="section-label" style="margin-top:1.2rem">Compare communities</div>',
+        unsafe_allow_html=True,
     )
 
-    if search.strip() and not df_comm.empty:
-        matches = df_comm[df_comm["city"].str.lower().str.contains(search.strip().lower())]
-        if matches.empty:
-            st.markdown(
-                f'<div style="color:#6B7280;font-size:0.85rem;margin-top:0.5rem">'
-                f'Cap resultat per "<b>{search}</b>"</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            for _, mrow in matches.iterrows():
-                cid   = mrow["community_id"]
-                color = comm_color_map.get(cid, "#6B7280")
-                st.markdown(f"""
-                <div style="background:#1A1D27;border:1px solid #2A2D3A;
-                            border-left:3px solid {color};border-radius:6px;
-                            padding:0.6rem 0.9rem;margin-bottom:0.4rem">
-                    <div style="font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:{color}">
-                        Community {cid}
-                    </div>
-                    <div style="font-size:1rem;font-weight:700;color:#F9FAFB;
-                                font-family:'IBM Plex Sans',sans-serif">
-                        {mrow['city']}
-                    </div>
-                </div>""", unsafe_allow_html=True)
-    elif not search.strip() and not df_comm.empty:
-        # Show full membership table when no search
-        st.dataframe(
-            df_comm.rename(columns={"community_id": "Community", "city": "City"}),
-            hide_index=True, width='stretch',
+    metric_map = {
+        "Internal orders":               ("internal_orders", "Internal orders",       "{:,}"),
+        "Number of cities":              ("n_cities",        "Cities",                "{}"),
+        "Internal lanes":                ("internal_lanes",  "Internal lanes",        "{}"),
+        "Avg risk score":                ("avg_risk",        "Risk score",            "{:.3f}"),
+        "Avg delay rate (%)":            ("avg_delay",       "Delay rate %",          "{:.1f}"),
+        "Avg route concentration (HHI)": ("avg_conc",        "Route concentration",   "{:.3f}"),
+    }
+
+    metric_col, _ = st.columns([1, 3])
+    with metric_col:
+        selected_metric_label = st.selectbox(
+            "Metric",
+            options=list(metric_map.keys()),
+            index=0,
+            key="community_compare_metric",
+            label_visibility="collapsed",
         )
+    selected_key, axis_title, fmt = metric_map[selected_metric_label]
+
+    sorted_cids = sorted(community_stats.keys())
+    labels = [f"Community {cid}" for cid in sorted_cids]
+    values = [community_stats[cid][selected_key] for cid in sorted_cids]
+    colors_ = [comm_color_map.get(cid, "#6B7280") for cid in sorted_cids]
+
+    fig_compare = go.Figure(go.Bar(
+        x=values, y=labels,
+        orientation="h",
+        marker=dict(color=colors_, line=dict(width=0)),
+        text=[fmt.format(v) for v in values],
+        textposition="outside",
+        textfont=dict(family=FONT_SANS, size=11, color="#F9FAFB"),
+        hovertemplate=f"<b>%{{y}}</b><br>{axis_title}: %{{text}}<extra></extra>",
+    ))
+    fig_compare.update_layout(
+        **base_layout(height=200),
+        xaxis=styled_xaxis(title=axis_title, showgrid=True),
+        yaxis=styled_yaxis(showgrid=False, autorange="reversed"),
+        margin=dict(l=10, r=60, t=10, b=40),
+        showlegend=False,
+    )
+    st.plotly_chart(fig_compare, width='stretch')
 
 
 

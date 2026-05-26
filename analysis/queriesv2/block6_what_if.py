@@ -62,25 +62,24 @@ class Block6Queries:
         WITH
             total_orders,
             f,
-            [r IN f.routes_used WHERE r IN $blocked_routes] AS blocked_hits
-
+            [r IN f.routes_used WHERE r IN $blocked_routes] AS blocked_hits,
+            apoc.convert.fromJsonMap(coalesce(f.route_share, '{}')) AS shares
         WHERE size(blocked_hits) > 0
 
         WITH
             total_orders,
             f,
-            size(blocked_hits) AS blocked_route_count,
-            size(f.routes_used) AS total_routes
+            reduce(s = 0.0, r IN blocked_hits | s + coalesce(shares[r], 0.0)) AS blocked_share
 
         WITH
             total_orders,
-            sum(f.orders) AS affected_orders
+            sum(toInteger(round(f.orders * blocked_share))) AS affected_orders
 
         RETURN
             $blocked_routes AS blocked_routes,
             affected_orders,
             round(100.0 * affected_orders / toFloat(total_orders), 2) AS pct_total_network
-    """   
+    """
 
     # 6.2 ROUTE-SHOCK REROUTABILITY
     # The primary route is derived from `route_share` (a JSON-encoded
@@ -98,14 +97,19 @@ class Block6Queries:
             apoc.convert.fromJsonMap(coalesce(f.route_share, '{}')) AS shares
         WHERE size(blocked_hits) > 0
         WITH
-            orig, dest, f, blocked_hits, surviving_routes_list,
+            orig, dest, f, blocked_hits, surviving_routes_list, shares,
+            reduce(s = 0.0, r IN blocked_hits | s + coalesce(shares[r], 0.0)) AS blocked_share
+        WITH
+            orig, dest, f, blocked_hits, surviving_routes_list, blocked_share,
             reduce(maxR = ['', 0.0], r IN keys(shares) |
                 CASE WHEN shares[r] > maxR[1] THEN [r, shares[r]] ELSE maxR END
             )[0] AS primary_route
         RETURN
             orig.id AS origin,
             dest.id AS destination,
-            f.orders AS affected_orders,
+            toInteger(round(f.orders * blocked_share)) AS affected_orders,
+            f.orders AS lane_total_orders,
+            round(100.0 * blocked_share, 1) AS affected_order_share_pct,
             blocked_hits AS blocked_routes,
             surviving_routes_list AS surviving_routes,
             size(blocked_hits) AS blocked_route_count,
@@ -204,6 +208,77 @@ class Block6Queries:
         ORDER BY total_affected_orders DESC
     """
     
+    # 6.4b NODE-FAILURE LANE SUBSTITUTION
+    # Per-(severed lane × product) view of substitute origins / destinations.
+    # The substitute must (a) be a city that is not in the failed set, (b) have
+    # observed history shipping (or receiving) the same product to (or from)
+    # the surviving endpoint. Same vocabulary as the route-shock penalty
+    # estimate so the user only learns one pattern.
+
+    NODE_FAILURE_LANE_SUBSTITUTION = """
+        MATCH (failed:City)<-[:ORIGIN_FROM]-(o:Order)-[:DESTINATION_TO]->(surv:City),
+              (o)-[:TRANSPORTS]->(prod:ProductCategory)
+        WHERE failed.id IN $blocked_cities
+          AND NOT surv.id IN $blocked_cities
+        WITH failed, surv, prod,
+             count(o) AS affected_orders,
+             avg(o.shipping_cost_usd) AS base_cost,
+             avg(o.actual_lead_time_days) AS base_lead
+
+        OPTIONAL MATCH (sub:City)<-[:ORIGIN_FROM]-(alt:Order)-[:DESTINATION_TO]->(surv),
+                       (alt)-[:TRANSPORTS]->(prod)
+        WHERE sub.id <> failed.id AND NOT sub.id IN $blocked_cities
+
+        WITH failed, surv, prod, affected_orders, base_cost, base_lead, sub,
+             count(alt) AS sub_history_orders,
+             avg(alt.shipping_cost_usd) AS sub_cost,
+             avg(alt.actual_lead_time_days) AS sub_lead
+
+        RETURN
+            failed.id AS failed_city,
+            'origin' AS failed_role,
+            surv.id AS surviving_city,
+            prod.name AS product,
+            affected_orders,
+            sub.id AS substitute_city,
+            sub_history_orders,
+            CASE WHEN sub IS NULL THEN NULL ELSE round(sub_cost - base_cost, 2) END AS cost_delta_usd,
+            CASE WHEN sub IS NULL THEN NULL ELSE round(sub_lead - base_lead, 2) END AS lead_delta_days,
+            CASE WHEN sub IS NULL THEN 'no_observed_alternative' ELSE 'reroutable_from_history' END AS feasibility
+
+        UNION
+
+        MATCH (surv:City)<-[:ORIGIN_FROM]-(o:Order)-[:DESTINATION_TO]->(failed:City),
+              (o)-[:TRANSPORTS]->(prod:ProductCategory)
+        WHERE failed.id IN $blocked_cities
+          AND NOT surv.id IN $blocked_cities
+        WITH failed, surv, prod,
+             count(o) AS affected_orders,
+             avg(o.shipping_cost_usd) AS base_cost,
+             avg(o.actual_lead_time_days) AS base_lead
+
+        OPTIONAL MATCH (surv)<-[:ORIGIN_FROM]-(alt:Order)-[:DESTINATION_TO]->(sub:City),
+                       (alt)-[:TRANSPORTS]->(prod)
+        WHERE sub.id <> failed.id AND NOT sub.id IN $blocked_cities
+
+        WITH failed, surv, prod, affected_orders, base_cost, base_lead, sub,
+             count(alt) AS sub_history_orders,
+             avg(alt.shipping_cost_usd) AS sub_cost,
+             avg(alt.actual_lead_time_days) AS sub_lead
+
+        RETURN
+            failed.id AS failed_city,
+            'destination' AS failed_role,
+            surv.id AS surviving_city,
+            prod.name AS product,
+            affected_orders,
+            sub.id AS substitute_city,
+            sub_history_orders,
+            CASE WHEN sub IS NULL THEN NULL ELSE round(sub_cost - base_cost, 2) END AS cost_delta_usd,
+            CASE WHEN sub IS NULL THEN NULL ELSE round(sub_lead - base_lead, 2) END AS lead_delta_days,
+            CASE WHEN sub IS NULL THEN 'no_observed_alternative' ELSE 'reroutable_from_history' END AS feasibility
+    """
+
     # 6.5 NODE-FAILURE GLOBAL IMPACT
 
     NODE_FAILURE_GLOBAL_IMPACT = """
@@ -324,6 +399,21 @@ class Block6Queries:
         return Block6Queries._run_query_with_params(
             driver,
             Block6Queries.NODE_FAILURE_LOCAL_IMPACT,
+            blocked_cities=blocked_cities
+        )
+
+    @staticmethod
+    def node_failure_lane_substitution(driver, blocked_cities: List[str]) -> pd.DataFrame:
+        """Per-(severed lane × product) substitute candidates.
+
+        For each affected lane decomposed by product category, find substitute
+        origins (when the failed city is origin) or substitute destinations
+        (when it's destination) that have observed history shipping/receiving
+        the same product to/from the surviving endpoint.
+        """
+        return Block6Queries._run_query_with_params(
+            driver,
+            Block6Queries.NODE_FAILURE_LANE_SUBSTITUTION,
             blocked_cities=blocked_cities
         )
         

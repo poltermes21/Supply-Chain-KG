@@ -131,15 +131,26 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
     font-size: 0.9rem; font-weight: 600; color: #D1D5DB;
 }
 .risk-metrics {
-    display: flex; gap: 1rem; margin-bottom: 0.6rem;
+    display: flex; gap: 0.6rem; margin-bottom: 0.6rem;
+    flex-wrap: wrap;
 }
 .risk-metric {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;          /* allow shrinking below content size — stops the value from being cropped */
 }
 .risk-metric-val {
     font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 1.1rem; font-weight: 700; color: #F9FAFB;
+    font-size: clamp(0.85rem, 1.4vw, 1.1rem);   /* shrinks gracefully on narrow screens */
+    font-weight: 700; color: #F9FAFB;
     line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@media (max-width: 1400px) {
+    /* On smaller laptops, stack the 3 metrics 2 + 1 instead of cramming a row of 3. */
+    .risk-metric { flex: 1 1 45%; }
+    .risk-metric-val { font-size: 1rem; }
 }
 .risk-metric-lbl {
     font-family: 'IBM Plex Mono', monospace;
