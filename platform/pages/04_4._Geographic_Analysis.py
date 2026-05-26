@@ -650,7 +650,7 @@ if search.strip() and not df_comm.empty:
                     </div>
                 </div>""", unsafe_allow_html=True)
 
-# Composition grid — one card per community, side by side
+# Composition grid
 st.markdown(
     '<div class="section-label" style="margin-top:1rem">Community composition</div>',
     unsafe_allow_html=True,
@@ -690,7 +690,7 @@ if community_stats:
             </div>
             """, unsafe_allow_html=True)
 
-# Comparison chart — communities ranked by a chosen metric
+# Comparison chart
 if community_stats:
     st.markdown(
         '<div class="section-label" style="margin-top:1.2rem">Compare communities</div>',

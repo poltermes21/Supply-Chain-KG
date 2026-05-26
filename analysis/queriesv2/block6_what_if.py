@@ -51,6 +51,17 @@ class Block6Queries:
             }
         )
     """
+    
+    # Full CITY_FLOW topology
+    
+    ALL_CITY_FLOW = """
+        MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
+        RETURN
+            orig.id AS origin,
+            dest.id AS destination,
+            f.orders AS orders
+        ORDER BY orders DESC
+    """
 
     # 6.1 ROUTE-SHOCK OVERVIEW
 
@@ -82,11 +93,11 @@ class Block6Queries:
     """
 
     # 6.2 ROUTE-SHOCK REROUTABILITY
-    # The primary route is derived from `route_share` (a JSON-encoded
+    # The primary route is derived from route_share(a JSON-encoded
     # {route_id: share} map) — it's the key with the highest value. A lane
-    # is in `primary_loss` only when that dominant route is among the blocked
+    # is in primary_loss only when that dominant route is among the blocked
     # ones; otherwise (some routes blocked, primary still alive) it's a
-    # `partial_loss`.
+    # partial_loss.
 
     ROUTE_SHOCK_REROUTABILITY = """
         MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
@@ -125,18 +136,6 @@ class Block6Queries:
         ORDER BY surviving_route_count ASC, affected_orders DESC
     """
 
-    # Full CITY_FLOW topology — used as a faint backdrop on the network
-    # visualisations so the user can see the whole network at a glance, with
-    # the affected lanes highlighted on top.
-    ALL_CITY_FLOW = """
-        MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
-        RETURN
-            orig.id AS origin,
-            dest.id AS destination,
-            f.orders AS orders
-        ORDER BY orders DESC
-    """
-
     # 6.3 ROUTE-SHOCK PENALTY ESTIMATE
 
     ROUTE_SHOCK_PENALTY_ESTIMATE = """
@@ -173,10 +172,6 @@ class Block6Queries:
     """
 
     # 6.4 NODE-FAILURE LOCAL IMPACT
-    # Note:
-    # This query measures the impact on lanes directly incident to the failed city.
-    # It does not model hidden intermediate transit legs, since the current KG does
-    # not contain explicit ShipmentLeg entities.
 
     NODE_FAILURE_LOCAL_IMPACT = """
         MATCH (c:City)
@@ -208,12 +203,11 @@ class Block6Queries:
         ORDER BY total_affected_orders DESC
     """
     
-    # 6.4b NODE-FAILURE LANE SUBSTITUTION
+    # 6.5 NODE-FAILURE LANE SUBSTITUTION
     # Per-(severed lane × product) view of substitute origins / destinations.
     # The substitute must (a) be a city that is not in the failed set, (b) have
     # observed history shipping (or receiving) the same product to (or from)
-    # the surviving endpoint. Same vocabulary as the route-shock penalty
-    # estimate so the user only learns one pattern.
+    # the surviving endpoint.
 
     NODE_FAILURE_LANE_SUBSTITUTION = """
         MATCH (failed:City)<-[:ORIGIN_FROM]-(o:Order)-[:DESTINATION_TO]->(surv:City),
@@ -277,23 +271,6 @@ class Block6Queries:
             CASE WHEN sub IS NULL THEN NULL ELSE round(sub_cost - base_cost, 2) END AS cost_delta_usd,
             CASE WHEN sub IS NULL THEN NULL ELSE round(sub_lead - base_lead, 2) END AS lead_delta_days,
             CASE WHEN sub IS NULL THEN 'no_observed_alternative' ELSE 'reroutable_from_history' END AS feasibility
-    """
-
-    # 6.5 NODE-FAILURE GLOBAL IMPACT
-
-    NODE_FAILURE_GLOBAL_IMPACT = """
-        MATCH (orig:City)-[f:CITY_FLOW]->(dest:City)
-        WHERE orig.id IN $blocked_cities
-        OR dest.id IN $blocked_cities
-
-        RETURN
-            orig.id AS origin,
-            dest.id AS destination,
-            f.orders AS affected_orders,
-            f.avg_cost_usd AS avg_cost,
-            f.avg_lead_time_days AS avg_lead_time,
-            f.avg_combined_risk_score AS risk_score
-        ORDER BY affected_orders DESC
     """
 
     # 6.6 SHORTEST PATH BY WEIGHT
@@ -418,14 +395,6 @@ class Block6Queries:
         )
         
     @staticmethod
-    def node_failure_global_impact(driver, blocked_cities: List[str]) -> pd.DataFrame:
-        return Block6Queries._run_query_with_params(
-            driver,
-            Block6Queries.NODE_FAILURE_GLOBAL_IMPACT,
-            blocked_cities=blocked_cities
-        )
-
-    @staticmethod
     def shortest_path_by_weight(
         driver,
         source_city: str,
@@ -493,9 +462,6 @@ class Block6Queries:
         if blocked_cities:
             results["node_failure_local_impact"] = Block6Queries.node_failure_local_impact(driver, blocked_cities=blocked_cities)
             
-        if blocked_cities:
-            results["node_failure_global_impact"] = Block6Queries.node_failure_global_impact(driver,blocked_cities=blocked_cities)
-
         if source_city and target_city:
             results["shortest_path_by_weight"] = Block6Queries.shortest_path_by_weight(
                 driver,

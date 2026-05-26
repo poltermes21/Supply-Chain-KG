@@ -46,6 +46,26 @@ TARGET_CITIES = ["Shanghai", "Rotterdam", "Singapore", "Hamburg",
                  "Shenzhen","Busan", "Mumbai", "Tokyo", "Santos"]
 CRITICAL_HUBS = {"Shanghai", "Rotterdam", "Singapore"}
 
+
+def _is_neo4j_connection_error(exc: Exception) -> bool:
+    """Identify connection-refused/unavailable errors from Neo4j driver calls."""
+    error_text = str(exc)
+    markers = (
+        "Couldn't connect",
+        "WinError 10061",
+        "Connection refused",
+        "ServiceUnavailable",
+        "Failed to establish connection",
+    )
+    return any(marker in error_text for marker in markers)
+
+
+def _show_neo4j_unavailable_warning():
+    st.warning(
+        "What-If simulation is unavailable because the Neo4j database is not running "
+        "or cannot be reached. You can retry anytime with the Run buttons."
+    )
+
 def base_layout(**kwargs):
     defaults = dict(
         paper_bgcolor=TRANSPARENT,
@@ -223,148 +243,6 @@ def _build_pyvis_route_shock(df_reroute, df_all_flow, all_cities, status_palette
 
     return apply_pyvis_post_processing(net.generate_html(notebook=False))
 
-
-def _build_pyvis_node_failure(df_global, df_all_flow, blocked_cities, all_cities):
-    """Network of severed lanes after one or more node failures, on top of
-    the full topology.
-
-    The whole CITY_FLOW network is drawn as a faint grey backdrop so the user
-    can see the unaffected lanes for context. Failed cities are rendered solid
-    red with a dashed border. Cities sitting on a severed lane are tinted red
-    proportionally to the affected order volume; the rest stay dim grey. Every
-    severed lane is a dashed red arrow whose width is proportional to its
-    affected orders.
-    """
-    from pyvis.network import Network
-
-    net = Network(
-        height="500px", width="100%",
-        bgcolor="#0F1117", font_color="#F9FAFB",
-        directed=True, notebook=False, cdn_resources="remote",
-    )
-    net.set_options("""
-    {
-      "nodes": {
-        "borderWidth": 2, "borderWidthSelected": 3,
-        "font": {"size": 14, "face": "IBM Plex Sans", "color": "#F9FAFB"}
-      },
-      "edges": {
-        "smooth": {"enabled": true, "type": "dynamic", "roundness": 0.3},
-        "selectionWidth": 1.5
-      },
-      "physics": {
-        "barnesHut": {
-          "gravitationalConstant": -3000, "centralGravity": 0.3,
-          "springLength": 150, "springConstant": 0.05,
-          "damping": 0.2, "avoidOverlap": 0.45
-        },
-        "minVelocity": 0.6, "solver": "barnesHut",
-        "stabilization": {"enabled": true, "iterations": 200, "fit": true}
-      },
-      "interaction": {
-        "hover": true, "dragNodes": true, "zoomView": true,
-        "tooltipDelay": 80, "navigationButtons": true
-      }
-    }
-    """)
-
-    blocked_set = set(blocked_cities or [])
-
-    # Per-city affected orders (excluding the failed cities themselves)
-    city_affected = {}
-    if not df_global.empty:
-        for _, r in df_global.iterrows():
-            for endpoint in (r["origin"], r["destination"]):
-                if endpoint in blocked_set:
-                    continue
-                city_affected[endpoint] = (
-                    city_affected.get(endpoint, 0) + int(r["affected_orders"])
-                )
-    max_aff = max(city_affected.values(), default=1) or 1
-
-    for city in all_cities:
-        if city in blocked_set:
-            net.add_node(
-                city, label=city,
-                color={"background": "#7F1D1D", "border": "#EF4444",
-                       "highlight": {"background": "#7F1D1D", "border": "#FCA5A5"}},
-                size=32,
-                borderWidth=3,
-                shapeProperties={"borderDashes": [4, 4]},
-                title=(f"<b>{city}</b><br><b style='color:#EF4444'>FAILED NODE</b><br>"
-                       f"All incident lanes are severed."),
-            )
-        else:
-            affected = city_affected.get(city, 0)
-            if affected > 0:
-                color = "#F59E0B"  # downstream impact
-                size = 18 + 22 * (affected / max_aff)
-                status = "Downstream impact"
-            else:
-                color = "#3D4151"
-                size = 14
-                status = "Unaffected"
-            net.add_node(
-                city, label=city,
-                color={"background": color, "border": "#0F1117",
-                       "highlight": {"background": color, "border": "#F9FAFB"}},
-                size=size,
-                title=(f"<b>{city}</b><br>"
-                       f"Status: {status}<br>"
-                       f"Affected orders (incident): {affected:,}"),
-            )
-
-    # Faint backdrop: all CITY_FLOW edges that aren't severed.
-    severed_pairs = set()
-    if not df_global.empty:
-        severed_pairs = {(r["origin"], r["destination"])
-                         for _, r in df_global.iterrows()}
-    if df_all_flow is not None and not df_all_flow.empty:
-        for _, r in df_all_flow.iterrows():
-            u, v = r["origin"], r["destination"]
-            if (u, v) in severed_pairs:
-                continue
-            net.add_edge(
-                u, v,
-                color={"color": "rgba(140,140,160,0.18)",
-                       "hover": "rgba(180,180,200,0.45)"},
-                width=1,
-                arrows={"to": {"enabled": True, "scaleFactor": 0.45}},
-                title=(f"<b>{u} &rarr; {v}</b><br>"
-                       f"Orders: {int(r['orders']):,}<br>"
-                       f"Not affected"),
-                physics=True,
-            )
-
-    # Severed lanes overlaid on top.
-    if not df_global.empty:
-        max_orders = int(df_global["affected_orders"].max()) or 1
-        for _, r in df_global.iterrows():
-            u, v = r["origin"], r["destination"]
-            orders = int(r["affected_orders"])
-            width = 1.5 + 4 * (orders / max_orders)
-            risk = float(r.get("risk_score", 0) or 0)
-            cost = float(r.get("avg_cost", 0) or 0)
-            lt = float(r.get("avg_lead_time", 0) or 0)
-            net.add_edge(
-                u, v,
-                color={"color": "rgba(239,68,68,0.85)",
-                       "hover": "#EF4444",
-                       "highlight": "#FCA5A5"},
-                width=width,
-                dashes=True,
-                arrows={"to": {"enabled": True, "scaleFactor": 0.8}},
-                title=(f"<b>{u} &rarr; {v}</b><br>"
-                       f"<b style='color:#EF4444'>SEVERED</b><br>"
-                       f"Affected orders: {orders:,}<br>"
-                       f"Risk score: {risk:.4f}<br>"
-                       f"Avg cost: ${cost:,.0f}<br>"
-                       f"Avg lead time: {lt:.1f}d"),
-                physics=True,
-            )
-
-    return apply_pyvis_post_processing(net.generate_html(notebook=False))
-
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
@@ -477,6 +355,8 @@ st.markdown(
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
 driver = get_neo4j_driver()
+what_if_db_unavailable = st.session_state.get("what_if_db_unavailable", False)
+what_if_db_unavailable_tab = st.session_state.get("what_if_db_unavailable_tab")
 
 # TABS
 tab_route, tab_node, tab_path = st.tabs([
@@ -491,6 +371,9 @@ tab_route, tab_node, tab_path = st.tabs([
 
 with tab_route:
     render_section_header("Route Shock Simulation")
+
+    if what_if_db_unavailable and what_if_db_unavailable_tab == "route":
+        _show_neo4j_unavailable_warning()
 
     # Presets
     st.markdown('<div class="preset-label">Quick Presets</div>', unsafe_allow_html=True)
@@ -520,7 +403,11 @@ with tab_route:
         default=default_routes,
     )
 
-    run_route = st.button("▶ Run Route Shock", type="primary", width='content')
+    run_route = st.button(
+        "▶ Run Route Shock",
+        type="primary",
+        width='content',
+    )
 
     # Only query and store results when button is pressed
     if run_route:
@@ -529,12 +416,25 @@ with tab_route:
             st.session_state["route_blocked"] = []
         else:
             with st.spinner("Simulating route shock..."):
-                df_overview = Block6Queries.route_shock_overview(driver, blocked_routes)
-                df_reroute  = Block6Queries.route_shock_reroutability(driver, blocked_routes)
-                df_penalty  = Block6Queries.route_shock_penalty_estimate(driver, blocked_routes)
-                df_all_flow = Block6Queries.all_city_flow(driver)
-            st.session_state["route_results"] = (df_overview, df_reroute, df_penalty, df_all_flow)
-            st.session_state["route_blocked"] = blocked_routes
+                try:
+                    df_overview = Block6Queries.route_shock_overview(driver, blocked_routes)
+                    df_reroute  = Block6Queries.route_shock_reroutability(driver, blocked_routes)
+                    df_penalty  = Block6Queries.route_shock_penalty_estimate(driver, blocked_routes)
+                    df_all_flow = Block6Queries.all_city_flow(driver)
+                    st.session_state["what_if_db_unavailable"] = False
+                    st.session_state["what_if_db_unavailable_tab"] = None
+                    st.session_state["route_results"] = (df_overview, df_reroute, df_penalty, df_all_flow)
+                    st.session_state["route_blocked"] = blocked_routes
+                except Exception as exc:
+                    if _is_neo4j_connection_error(exc):
+                        st.session_state["what_if_db_unavailable"] = True
+                        st.session_state["what_if_db_unavailable_tab"] = "route"
+                        _show_neo4j_unavailable_warning()
+                    else:
+                        st.warning(
+                            "Route shock simulation is temporarily unavailable. "
+                            "Please try again."
+                        )
 
     # Render stored results (only if they exist)
     if st.session_state.get("route_results") is not None:
@@ -758,6 +658,9 @@ with tab_route:
 with tab_node:
     render_section_header("Node Failure Simulation")
 
+    if what_if_db_unavailable and what_if_db_unavailable_tab == "node":
+        _show_neo4j_unavailable_warning()
+
     # Presets
     st.markdown('<div class="preset-label">Quick Presets</div>', unsafe_allow_html=True)
     np_c1, np_c2, np_c3 = st.columns(3)
@@ -780,7 +683,11 @@ with tab_node:
         default=default_cities,
     )
 
-    run_node = st.button("▶ Run Node Failure", type="primary", key="run_node")
+    run_node = st.button(
+        "▶ Run Node Failure",
+        type="primary",
+        key="run_node",
+    )
 
     # Only query and store results when button is pressed
     if run_node:
@@ -789,16 +696,27 @@ with tab_node:
             st.session_state["node_blocked"] = []
         else:
             with st.spinner("Simulating node failure..."):
-                df_local       = Block6Queries.node_failure_local_impact(driver, blocked_cities)
-                df_global      = Block6Queries.node_failure_global_impact(driver, blocked_cities)
-                df_substitute  = Block6Queries.node_failure_lane_substitution(driver, blocked_cities)
-                df_all_flow_n  = Block6Queries.all_city_flow(driver)
-            st.session_state["node_results"] = (df_local, df_global, df_substitute, df_all_flow_n)
-            st.session_state["node_blocked"] = blocked_cities
+                try:
+                    df_local       = Block6Queries.node_failure_local_impact(driver, blocked_cities)
+                    df_substitute  = Block6Queries.node_failure_lane_substitution(driver, blocked_cities)
+                    st.session_state["what_if_db_unavailable"] = False
+                    st.session_state["what_if_db_unavailable_tab"] = None
+                    st.session_state["node_results"] = (df_local, df_substitute)
+                    st.session_state["node_blocked"] = blocked_cities
+                except Exception as exc:
+                    if _is_neo4j_connection_error(exc):
+                        st.session_state["what_if_db_unavailable"] = True
+                        st.session_state["what_if_db_unavailable_tab"] = "node"
+                        _show_neo4j_unavailable_warning()
+                    else:
+                        st.warning(
+                            "Node failure simulation is temporarily unavailable. "
+                            "Please try again."
+                        )
 
     # Render stored results (only if they exist)
     if st.session_state.get("node_results") is not None:
-        df_local, df_global, df_substitute, df_all_flow_n = st.session_state["node_results"]
+        df_local, df_substitute = st.session_state["node_results"]
         displayed_cities = st.session_state.get("node_blocked", blocked_cities)
 
         if df_local.empty:
@@ -848,77 +766,6 @@ with tab_node:
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
-
-        # Global impact network + bar chart
-        if not df_global.empty:
-            st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-            st.markdown('<div class="section-label">Severed network — affected lanes</div>',
-                        unsafe_allow_html=True)
-
-            try:
-                node_html = _build_pyvis_node_failure(
-                    df_global, df_all_flow_n, displayed_cities, ALL_CITIES,
-                )
-                render_pyvis_html(node_html, height=520)
-                st.caption(
-                    "Failed cities have a dashed red border · "
-                    "Amber nodes = cities with downstream impact (size ∝ affected orders) · "
-                    "Dashed red arrows = severed lanes (width ∝ affected orders) · "
-                    "Faint arrows = unaffected lanes (full topology backdrop). "
-                    "Hover a severed lane for risk / cost / lead time."
-                )
-            except ModuleNotFoundError:
-                st.warning("PyVis is not installed. Run `pip install pyvis` to enable this view.")
-            except Exception as e:
-                st.warning(f"Could not render network: {e}")
-
-            st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
-            st.markdown('<div class="section-label">Global impact — lanes affected by the failure</div>',
-                        unsafe_allow_html=True)
-
-            df_g = df_global.copy()
-            df_g["lane"] = df_g["origin"] + " → " + df_g["destination"]
-            df_g = df_g.sort_values("affected_orders", ascending=True).head(20)
-
-            fig_node = go.Figure(go.Bar(
-                x=df_g["affected_orders"],
-                y=df_g["lane"],
-                orientation="h",
-                marker=dict(
-                    color=df_g["avg_cost"],
-                    colorscale="Reds",
-                    colorbar=dict(
-                        title=dict(text="Avg cost",
-                                   font=dict(size=10, family=FONT_SANS, color=TEXT_COLOR)),
-                        tickfont=dict(size=9, family=FONT_SANS, color=TEXT_COLOR),
-                        thickness=12,
-                    ),
-                    showscale=True,
-                ),
-                text=[f"{int(v):,} orders" for v in df_g["affected_orders"]],
-                textposition="none",
-                textfont=dict(size=9, family=FONT_MONO, color=TEXT_COLOR),
-                hovertemplate=(
-                    "<b>%{y}</b><br>"
-                    "Affected: %{x:,} orders<br>"
-                    "Risk score: %{customdata[0]:.4f}<br>"
-                    "Avg cost: $%{customdata[1]:,.0f}<br>"
-                    "Avg LT: %{customdata[2]:.1f}d"
-                    "<extra></extra>"
-                ),
-                customdata=df_g[["risk_score", "avg_cost", "avg_lead_time"]].values,
-            ))
-            fig_node.update_layout(
-                **base_layout(height=max(320, len(df_g) * 34 + 60)),
-                xaxis=styled_xaxis(title="Affected orders"),
-                yaxis=styled_yaxis(showgrid=False),
-                margin=dict(l=12, r=160, t=16, b=12),
-            )
-            st.plotly_chart(fig_node, width='stretch')
-            st.caption(
-                "Lanes by affected volume. Color = average cost per lane (red = higher cost). "
-                "Includes all lanes where the failed city is origin or destination."
-            )
 
         # Substitute lanes — by product
         if df_substitute is not None and not df_substitute.empty:
@@ -1038,6 +885,10 @@ with tab_node:
 
 with tab_path:
     render_section_header("Emergency Path Optimization")
+
+    if what_if_db_unavailable and what_if_db_unavailable_tab == "path":
+        _show_neo4j_unavailable_warning()
+
     st.markdown(
         "Find the best route between two cities — by lead time, cost or risk. "
         "All three criteria are compared side by side."
@@ -1050,7 +901,11 @@ with tab_path:
     with pc2:
         tgt_city = st.selectbox("Destination", options=TARGET_CITIES, index=TARGET_CITIES.index("Rotterdam"))
 
-    run_path = st.button("▶ Find Optimal Paths", type="primary", key="run_path")
+    run_path = st.button(
+        "▶ Find Optimal Paths",
+        type="primary",
+        key="run_path",
+    )
 
     # Only query and store results when button is pressed
     if run_path:
@@ -1070,11 +925,21 @@ with tab_path:
                             driver, src_city, tgt_city, weight
                         )
                         results[weight] = df_p
-                    except Exception as e:
+                    except Exception as exc:
+                        if _is_neo4j_connection_error(exc):
+                            st.session_state["what_if_db_unavailable"] = True
+                            st.session_state["what_if_db_unavailable_tab"] = "path"
+                            _show_neo4j_unavailable_warning()
+                            results = None
+                            break
                         results[weight] = pd.DataFrame()
-            st.session_state["path_results"] = results
-            st.session_state["path_src"] = src_city
-            st.session_state["path_tgt"] = tgt_city
+
+            if results is not None:
+                st.session_state["what_if_db_unavailable"] = False
+                st.session_state["what_if_db_unavailable_tab"] = None
+                st.session_state["path_results"] = results
+                st.session_state["path_src"] = src_city
+                st.session_state["path_tgt"] = tgt_city
 
     # Render stored results (only if they exist)
     if st.session_state.get("path_results") is not None:

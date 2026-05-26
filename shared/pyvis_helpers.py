@@ -9,18 +9,22 @@ network without trapping the wheel).
 
 import base64
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 def render_pyvis_html(html: str, height: int = 640):
     """Embed a PyVis-generated HTML document inside the Streamlit page.
 
-    Future-proof replacement for ``st.components.v1.html`` (deprecated for
-    removal after 2026-06-01). Uses a base64 ``data:text/html`` URL with
-    ``st.iframe`` so we keep the iframe isolation and explicit pixel height
-    that ``st.html`` does not currently offer.
+    Uses `st.iframe` when available, and falls back to the stable
+    components API on older Streamlit versions that do not expose it.
     """
     encoded = base64.b64encode(html.encode("utf-8")).decode("ascii")
-    st.iframe(f"data:text/html;base64,{encoded}", height=height)
+    iframe = getattr(st, "iframe", None)
+    if callable(iframe):
+        iframe(f"data:text/html;base64,{encoded}", height=height)
+        return
+
+    components.html(html, height=height, scrolling=False)
 
 
 def apply_pyvis_post_processing(html: str) -> str:
