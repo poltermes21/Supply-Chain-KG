@@ -399,7 +399,7 @@ class KGExtractor:
         Structural relationships defining logistics network topology.
 
         - LOCATED_IN    (City)->(Country)
-        - CONNECTS      (Route)->(City)       + direction
+        - CONNECTS      (Route)->(City)           + role (origin/destination/both)
         - VULNERABLE_TO (Route)->(DisruptionType) + frequency, severity
         """
         print("Extracting structural relationships...")
@@ -424,19 +424,40 @@ class KGExtractor:
         origin_connects = self.df[['Route_Type', 'Origin_City_Name']].drop_duplicates().rename(
             columns={'Origin_City_Name': 'city'}
         )
-        origin_connects['direction'] = 'origin'
+        origin_connects['is_origin'] = True
+        origin_connects['is_destination'] = False
 
         dest_connects = self.df[['Route_Type', 'Destination_City_Name']].drop_duplicates().rename(
             columns={'Destination_City_Name': 'city'}
         )
-        dest_connects['direction'] = 'destination'
+        dest_connects['is_origin'] = False
+        dest_connects['is_destination'] = True
+
+        connect_flags = (
+            pd.concat([origin_connects, dest_connects], ignore_index=True)
+            .groupby(['Route_Type', 'city'], as_index=False)
+            .agg(
+                is_origin=('is_origin', 'max'),
+                is_destination=('is_destination', 'max')
+            )
+        )
 
         connects = []
-        for _, row in pd.concat([origin_connects, dest_connects]).iterrows():
+        for _, row in connect_flags.iterrows():
+            is_origin = bool(row['is_origin'])
+            is_destination = bool(row['is_destination'])
+
+            if is_origin and is_destination:
+                role = 'both'
+            elif is_origin:
+                role = 'origin'
+            else:
+                role = 'destination'
+
             connects.append({
-                'from':      row['Route_Type'],
-                'to':        row['city'],
-                'direction': row['direction'],
+                'from': row['Route_Type'],
+                'to': row['city'],
+                'role': role,
             })
 
         # --- VULNERABLE_TO ---
