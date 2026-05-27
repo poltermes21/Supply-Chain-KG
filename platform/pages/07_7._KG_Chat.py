@@ -10,7 +10,7 @@ import re
 import markdown as md_lib
 import plotly.express as px
 from agent import run as agent_run, get_memory, generate_chart_specs
-from shared.chart_colors import infer_color_map, DEFAULT_PALETTE
+from shared.colors import infer_color_map, DEFAULT_PALETTE
 
 st.set_page_config(page_title="KG Chat", layout="wide")
 
@@ -185,14 +185,10 @@ def render_user_msg(content: str) -> None:
 def _render_chart(spec, dataframes) -> None:
     """Render one ChartSpec via plotly.express.
 
-    Applies the NL labels Flash produced (falling back to the raw column name
-    if absent). Auto-colours bar charts by x_col when no explicit color_col
-    was provided. For known categorical columns (route, risk_level,
-    shock_status, redundancy profile, community) the colour mapping is
-    pulled from the centralised palette so the chat charts match the rest
-    of the app (Suez always blue, CoGH always red, Community 3 always the
-    same hue page 4 uses, etc.). Other categoricals fall back to a generic
-    palette sequence.
+    Applies the NL labels Flash produced. For known categorical columns 
+    the colour mapping is pulled from the centralised palette so the chat 
+    charts match the restof the app  Other categoricals fall back to a 
+    generic palette sequence.
     """
     if spec.df_index < 0 or spec.df_index >= len(dataframes):
         return
@@ -201,7 +197,6 @@ def _render_chart(spec, dataframes) -> None:
         return
     try:
         # Fall back to raw column names when Flash didn't return NL labels
-        # (e.g., specs cached before this prompt update).
         x_label = (getattr(spec, "x_label", "") or spec.x_col)
         y_label = (getattr(spec, "y_label", "") or spec.y_col)
         labels = {spec.x_col: x_label, spec.y_col: y_label}
@@ -223,8 +218,7 @@ def _render_chart(spec, dataframes) -> None:
             kwargs["color"] = spec.x_col
             auto_colour_by_x = True
 
-        # If the column driving colour matches a known categorical (route,
-        # risk_level, shock_status, redundancy profile, community), pin the
+        # If the column driving colour matches a known categorical pin the
         # mapping so values keep their app-wide hue. Otherwise use the
         # generic sequence palette.
         colour_col = kwargs.get("color")
@@ -245,7 +239,7 @@ def _render_chart(spec, dataframes) -> None:
         elif spec.chart_type == "scatter":
             fig = px.scatter(df, x=spec.x_col, y=spec.y_col, **kwargs)
         elif spec.chart_type == "pie":
-            # Pie chart colours via names column; mirror the same logic.
+            # Pie chart colours via names column, mirror the same logic.
             pie_kwargs = {"title": spec.title}
             unique_vals = df[spec.x_col].dropna().unique().tolist()
             pie_mapping = infer_color_map(spec.x_col, unique_vals)
@@ -255,7 +249,7 @@ def _render_chart(spec, dataframes) -> None:
             else:
                 pie_kwargs["color_discrete_sequence"] = DEFAULT_PALETTE
             fig = px.pie(df, names=spec.x_col, values=spec.y_col, **pie_kwargs)
-            # px.pie ignores `labels`; restate units in the hover.
+            # px.pie ignores labels, restate units in the hover.
             fig.update_traces(
                 hovertemplate=(
                     f"<b>%{{label}}</b><br>{y_label}: %{{value}}<extra></extra>"
@@ -264,8 +258,7 @@ def _render_chart(spec, dataframes) -> None:
         else:
             return
 
-        # Hide the legend when bars are auto-coloured by x — it would just
-        # duplicate the x-axis tick labels.
+        # Hide the legend when bars are auto-coloured by x, it would just duplicate the x-axis tick labels.
         if auto_colour_by_x:
             fig.update_layout(showlegend=False)
 
@@ -321,8 +314,6 @@ def render_assistant_msg(
     )
 
     if is_generating_this:
-        # The Flash call for this message is running right now — show inline
-        # progress so the user knows where the work is happening.
         st.caption("Generating visualisation…")
     elif chart_error:
         # Distinguishes a real failure from "Flash returned no charts".
@@ -336,9 +327,9 @@ def render_assistant_msg(
             st.session_state.pending_chart_idx = msg_idx
             st.rerun()
     elif charts is None:
-        # Not yet generated — surface the on-demand button.
+        # Not yet generated, surface the on-demand button.
         if st.button(
-            "Visualize",
+            "Generate chart/s",
             key=f"viz_btn_{msg_idx}",
             disabled=any_op_in_progress,
         ):
@@ -415,7 +406,7 @@ if st.session_state.pending_input:
         "iterations":      iterations,
         "tool_dataframes": tool_dataframes,
         "chartable":       chartable,
-        "charts":          None,  # not yet generated; the Visualize button drives this
+        "charts":          None,  # not yet generated, the Visualize button drives this
         "chart_error":     None,  # populated only if chart generation throws
     })
 
@@ -442,7 +433,7 @@ if st.session_state.pending_chart_idx is not None:
             entry["charts"]      = specs
             entry["chart_error"] = None
         except Exception as e:
-            # Real failure: keep `charts` as None so the user can retry, and
+            # Real failure: keep charts as None so the user can retry, and
             # surface a short reason inline next to the message.
             err_msg = str(e) or e.__class__.__name__
             if len(err_msg) > 200:

@@ -5,7 +5,7 @@ from shared.connection import get_neo4j_driver
 from analysis.queriesv2.block6_what_if import Block6Queries
 from shared.ui_helpers import render_section_header
 from shared.pyvis_helpers import apply_pyvis_post_processing, render_pyvis_html
-from shared.chart_colors import SHOCK_STATUS_COLORS
+from shared.colors import SHOCK_STATUS_COLORS
 
 st.set_page_config(page_title="What-If Scenarios", layout="wide")
 

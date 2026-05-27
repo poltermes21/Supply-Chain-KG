@@ -4,6 +4,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import pandas as pd
 from shared.analysis_store import load_block_data
+from shared.colors import DEFAULT_PALETTE, infer_color_map
 from shared.ui_helpers import render_section_header
 
 st.set_page_config(page_title="Cost & Mitigation Efficiency", layout="wide")
@@ -213,18 +214,10 @@ df_mit_ctx   = data["mitigation_by_context"]
 df_air       = data["expedited_air_usage"]
 
 # PREPROCESS
-PALETTE = [
-    "#1D4ED8",  # blue
-    "#10B981",  # green
-    "#F59E0B",  # amber
-    "#EF4444",  # red
-    "#8B5CF6",  # purple
-]
-
-disruption_types = sorted(df_by_type["disruption_type"].unique())
-COLOR_MAP = {
-    t: PALETTE[i % len(PALETTE)]
-    for i, t in enumerate(disruption_types)
+disruption_types = sorted(df_by_type["disruption_type"].dropna().unique())
+COLOR_MAP = infer_color_map("disruption_type", disruption_types) or {
+    value: DEFAULT_PALETTE[i % len(DEFAULT_PALETTE)]
+    for i, value in enumerate(disruption_types)
 }
 
 
@@ -311,7 +304,7 @@ if not df_by_type.empty:
                 name=row["disruption_type"],
                 x=[row["disruption_type"]],
                 y=[row["avg_cost_vs_baseline_pct"]],
-                marker_color=COLOR_MAP[row["disruption_type"]],
+                marker_color=COLOR_MAP.get(row["disruption_type"], DEFAULT_PALETTE[i % len(DEFAULT_PALETTE)]),
                 opacity=0.85,
                 text=[f"{row['avg_cost_vs_baseline_pct']:.1f}%"],
                 textposition="outside",
@@ -391,7 +384,7 @@ with col_radar:
             df_r[c + "_norm"] = df_r[c].rank(pct=True)
 
         for i, (_, row) in enumerate(df_r.iterrows()):
-            color = PALETTE[i % len(PALETTE)]
+            color = COLOR_MAP.get(row["disruption_type"], DEFAULT_PALETTE[i % len(DEFAULT_PALETTE)])
 
             vals = [
                 row["avg_cost_vs_baseline_pct_norm"],

@@ -5,7 +5,7 @@ import pandas as pd
 from shared.analysis_store import load_block_data
 from shared.ui_helpers import render_section_header
 from shared.pyvis_helpers import apply_pyvis_post_processing, render_pyvis_html
-from shared.chart_colors import COMMUNITY_PALETTE
+from shared.colors import COMMUNITY_PALETTE
 
 st.set_page_config(page_title="Geographic Analysis", layout="wide")
 

@@ -6,7 +6,7 @@ import pandas as pd
 import json as _json
 from shared.analysis_store import load_block_data
 from shared.ui_helpers import render_section_header
-from shared.chart_colors import ROUTE_COLORS, REDUNDANCY_PROFILE_COLORS
+from shared.colors import ROUTE_COLORS, REDUNDANCY_PROFILE_COLORS
 
 st.set_page_config(page_title="Operational Baseline", layout="wide")
 

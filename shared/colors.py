@@ -2,19 +2,10 @@
 Centralised colour palettes for categorical fields shared across the platform
 pages and the chat agent's chart rendering. Same hue always represents the
 same value (a given route, risk level, shock status, community, etc.).
-
-If a chart's categorical column matches a known semantic (route, risk level,
-shock status, redundancy profile, community), use ``infer_color_map`` to get
-a ``{value: color}`` mapping aligned with the rest of the app. For unknown
-categoricals, fall back to ``DEFAULT_PALETTE``.
-
-The page-level constants (e.g. ``ROUTE_COLORS`` in
-``platform/pages/01_1._Operational_Baseline.py``) currently duplicate these
-values; pages can migrate to import from here when convenient.
 """
 
 
-# Routes — page 1
+# Routes
 ROUTE_COLORS = {
     "Suez":       "#1D4ED8",
     "Pacific":    "#10B981",
@@ -23,7 +14,7 @@ ROUTE_COLORS = {
     "Atlantic":   "#8B5CF6",
 }
 
-# Risk levels — page 2
+# Risk levels
 RISK_LEVEL_COLORS = {
     "low":      "#10B981",
     "medium":   "#F59E0B",
@@ -31,15 +22,20 @@ RISK_LEVEL_COLORS = {
     "critical": "#7C3AED",
 }
 
-# Shock status — page 6 (Route Shock simulation)
+# Shock status
 SHOCK_STATUS_COLORS = {
     "fully_blocked": "#EF4444",
     "primary_loss":  "#F59E0B",
     "partial_loss":  "#3B82F6",
 }
 
-# Redundancy profile — page 1 (route concentration KPIs).
-# Stored both in snake_case (raw from data) and Title Case (display form).
+# Disruption types
+DISRUPTION_PALETTE = [
+    "#1D4ED8", "#10B981", "#F59E0B", "#EF4444",
+    "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16",
+]
+
+# Redundancy profile
 REDUNDANCY_PROFILE_COLORS = {
     "single_route":            "#EF4444",
     "Single Route":            "#EF4444",
@@ -113,6 +109,14 @@ def infer_color_map(column_name: str, values) -> dict | None:
     if "shock_status" in col or "shock" in col:
         return _build_map(values, SHOCK_STATUS_COLORS)
 
+    # Disruption types — stable palette for any disruption category label.
+    if "disruption" in col:
+        sorted_vals = sorted({v for v in values if v is not None}, key=lambda v: str(v))
+        return {
+            v: DISRUPTION_PALETTE[i % len(DISRUPTION_PALETTE)]
+            for i, v in enumerate(sorted_vals)
+        }
+
     # Redundancy profile — only if at least one observed value is known.
     if "redundancy" in col or "profile" in col:
         if any(_lookup(REDUNDANCY_PROFILE_COLORS, v) for v in values):
@@ -120,7 +124,7 @@ def infer_color_map(column_name: str, values) -> dict | None:
         return None
 
     # Communities — palette assigned to sorted unique values (matches
-    # page-4 behaviour: smallest community_id gets the first palette colour).
+    # smallest community_id gets the first palette colour).
     if "community" in col:
         sorted_vals = sorted({v for v in values if v is not None}, key=lambda v: str(v))
         return {v: DEFAULT_PALETTE[i % len(DEFAULT_PALETTE)]
