@@ -138,6 +138,57 @@ def _count_tool_calls(messages: list) -> int:
     return count
 
 
+def _extract_tool_dataframes(messages: list) -> list:
+    """Parse every successful query_graph tool result back into a DataFrame.
+
+    The query_graph tool returns a JSON-serialised list of records (or an
+    error string starting with 'ERROR' / 'No records returned'). We skip
+    those. A leading truncation NOTE (added when results were capped) is
+    stripped before parsing.
+    """
+    import json
+    import pandas as pd
+    from langchain_core.messages import ToolMessage
+
+    dataframes: list = []
+    for msg in messages:
+        if not isinstance(msg, ToolMessage):
+            continue
+        content = msg.content
+        if not isinstance(content, str) or not content.strip():
+            continue
+        if content.startswith("ERROR") or content.startswith("No records returned"):
+            continue
+        body = content
+        if body.startswith("NOTE:"):
+            sep = body.find("\n\n")
+            if sep >= 0:
+                body = body[sep + 2:]
+        try:
+            records = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(records, list) or not records:
+            continue
+        try:
+            df = pd.DataFrame.from_records(records)
+        except Exception:
+            continue
+        if not df.empty:
+            dataframes.append(df)
+    return dataframes
+
+
+def _is_chartable(dataframes: list) -> bool:
+    """At least one DataFrame must have ≥2 rows AND ≥2 columns to be worth
+    offering a chart on. Single values / single-column lists are not
+    meaningfully chartable."""
+    for df in dataframes:
+        if len(df) >= 2 and len(df.columns) >= 2:
+            return True
+    return False
+
+
 # Public run() function
 
 def run(question: str, session_id: str = "default") -> AgentOutput:
@@ -198,6 +249,8 @@ def run(question: str, session_id: str = "default") -> AgentOutput:
     final_answer = _extract_final_answer(result["messages"], question)
     cypher_queries = _extract_cypher_queries(result["messages"])
     iterations = _count_tool_calls(result["messages"])
+    tool_dataframes = _extract_tool_dataframes(result["messages"])
+    chartable = _is_chartable(tool_dataframes)
 
     # 5. Persist turn to memorY
     memory.add_turn(question, final_answer)
@@ -206,4 +259,6 @@ def run(question: str, session_id: str = "default") -> AgentOutput:
         answer=final_answer,
         cypher_queries=cypher_queries,
         iterations_used=iterations,
+        tool_dataframes=tool_dataframes,
+        chartable=chartable,
     )

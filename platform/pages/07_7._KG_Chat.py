@@ -8,7 +8,8 @@ import streamlit as st
 import uuid
 import re
 import markdown as md_lib
-from agent import run as agent_run, get_memory
+import plotly.express as px
+from agent import run as agent_run, get_memory, generate_chart_specs
 
 st.set_page_config(page_title="KG Chat", layout="wide")
 
@@ -105,6 +106,9 @@ if "show_cypher" not in st.session_state:
 if "pending_input" not in st.session_state:
     st.session_state.pending_input = None
 
+if "pending_chart_idx" not in st.session_state:
+    st.session_state.pending_chart_idx = None
+
 if "display_history" not in st.session_state:
     st.session_state.display_history = []
 
@@ -119,7 +123,12 @@ st.markdown(
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
 # SIDEBAR
-is_generating = st.session_state.pending_input is not None
+# Lock all state-mutating controls while EITHER an answer or a chart is
+# generating, so the user can't fire a second operation in parallel.
+is_generating = (
+    st.session_state.pending_input is not None
+    or st.session_state.pending_chart_idx is not None
+)
 
 with st.sidebar:
     st.markdown("### Chat settings")
@@ -171,10 +180,51 @@ def render_user_msg(content: str) -> None:
     )
 
 
+def _render_chart(spec, dataframes) -> None:
+    """Render one ChartSpec via plotly.express."""
+    if spec.df_index < 0 or spec.df_index >= len(dataframes):
+        return
+    df = dataframes[spec.df_index]
+    if df is None or df.empty:
+        return
+    try:
+        kwargs = {"title": spec.title}
+        if spec.color_col:
+            kwargs["color"] = spec.color_col
+        if spec.chart_type == "bar":
+            fig = px.bar(df, x=spec.x_col, y=spec.y_col, **kwargs)
+        elif spec.chart_type == "line":
+            fig = px.line(df, x=spec.x_col, y=spec.y_col, markers=True, **kwargs)
+        elif spec.chart_type == "scatter":
+            fig = px.scatter(df, x=spec.x_col, y=spec.y_col, **kwargs)
+        elif spec.chart_type == "pie":
+            fig = px.pie(df, names=spec.x_col, values=spec.y_col, title=spec.title)
+        else:
+            return
+        fig.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="IBM Plex Sans, sans-serif", color="#E5E7EB"),
+            margin=dict(l=10, r=10, t=40, b=40),
+            height=360,
+        )
+        st.plotly_chart(fig, width="stretch")
+        if spec.rationale:
+            st.caption(spec.rationale)
+    except Exception as e:
+        st.warning(f"Could not render chart: {e}")
+
+
 def render_assistant_msg(
     content: str,
     cypher_queries: list[str] | None = None,
     iterations: int = 0,
+    msg_idx: int | None = None,
+    chartable: bool = False,
+    charts: list | None = None,
+    tool_dataframes: list | None = None,
+    question: str = "",
+    chart_error: str | None = None,
 ) -> None:
     iter_badge = (
         f'<span class="iter-badge">{iterations} tool call{"s" if iterations != 1 else ""}</span>'
@@ -193,6 +243,45 @@ def render_assistant_msg(
             with st.expander(label):
                 st.code(cypher, language="cypher")
 
+    if not (chartable and msg_idx is not None and tool_dataframes):
+        return
+
+    is_generating_this = st.session_state.pending_chart_idx == msg_idx
+    any_op_in_progress = (
+        st.session_state.pending_input is not None
+        or st.session_state.pending_chart_idx is not None
+    )
+
+    if is_generating_this:
+        # The Flash call for this message is running right now — show inline
+        # progress so the user knows where the work is happening.
+        st.caption("Generating visualisation…")
+    elif chart_error:
+        # Distinguishes a real failure from "Flash returned no charts".
+        st.warning(f"Could not generate visualisation. {chart_error}")
+        if st.button(
+            "Try again",
+            key=f"viz_retry_{msg_idx}",
+            disabled=any_op_in_progress,
+        ):
+            st.session_state.display_history[msg_idx]["chart_error"] = None
+            st.session_state.pending_chart_idx = msg_idx
+            st.rerun()
+    elif charts is None:
+        # Not yet generated — surface the on-demand button.
+        if st.button(
+            "Visualize",
+            key=f"viz_btn_{msg_idx}",
+            disabled=any_op_in_progress,
+        ):
+            st.session_state.pending_chart_idx = msg_idx
+            st.rerun()
+    elif len(charts) == 0:
+        st.caption("No additional visualisation adds insight for this answer.")
+    else:
+        for spec in charts:
+            _render_chart(spec, tool_dataframes)
+
 # CHAT HISTORY DISPLAY
 if not st.session_state.display_history and not is_generating:
     st.markdown(
@@ -202,7 +291,15 @@ if not st.session_state.display_history and not is_generating:
         unsafe_allow_html=True,
     )
 
-for msg in st.session_state.display_history:
+def _previous_user_question(history, idx):
+    """Walk backwards from `idx` and return the latest user message content."""
+    for j in range(idx - 1, -1, -1):
+        m = history[j]
+        if m.get("role") == "user":
+            return m.get("content", "")
+    return ""
+
+for i, msg in enumerate(st.session_state.display_history):
     if msg["role"] == "user":
         render_user_msg(msg["content"])
     else:
@@ -210,6 +307,12 @@ for msg in st.session_state.display_history:
             msg["content"],
             cypher_queries=msg.get("cypher_queries"),
             iterations=msg.get("iterations", 0),
+            msg_idx=i,
+            chartable=msg.get("chartable", False),
+            charts=msg.get("charts"),  # None = not yet generated, [] = generated but empty
+            tool_dataframes=msg.get("tool_dataframes"),
+            question=_previous_user_question(st.session_state.display_history, i),
+            chart_error=msg.get("chart_error"),
         )
 
 
@@ -223,24 +326,62 @@ if st.session_state.pending_input:
     with st.spinner("Thinking..."):
         try:
             result = agent_run(question, session_id=SESSION_ID)
-            answer         = result.answer
-            cypher_queries = result.cypher_queries   # list[str], one per tool call
-            iterations     = result.iterations_used
+            answer          = result.answer
+            cypher_queries  = result.cypher_queries
+            iterations      = result.iterations_used
+            tool_dataframes = result.tool_dataframes
+            chartable       = result.chartable
         except Exception as e:
-            answer         = f"Agent error: {e}"
-            cypher_queries = []
-            iterations     = 0
+            answer          = f"Agent error: {e}"
+            cypher_queries  = []
+            iterations      = 0
+            tool_dataframes = []
+            chartable       = False
 
     # Persist to display history
     st.session_state.display_history.append({"role": "user", "content": question})
     st.session_state.display_history.append({
-        "role":          "assistant",
-        "content":       answer,
-        "cypher_queries": cypher_queries,
-        "iterations":    iterations,
+        "role":            "assistant",
+        "content":         answer,
+        "cypher_queries":  cypher_queries,
+        "iterations":      iterations,
+        "tool_dataframes": tool_dataframes,
+        "chartable":       chartable,
+        "charts":          None,  # not yet generated; the Visualize button drives this
+        "chart_error":     None,  # populated only if chart generation throws
     })
 
     st.session_state.pending_input = None
+    st.rerun()
+
+
+# PROCESS PENDING CHART REQUEST
+if st.session_state.pending_chart_idx is not None:
+    idx = st.session_state.pending_chart_idx
+    history = st.session_state.display_history
+    if 0 <= idx < len(history) and history[idx].get("role") == "assistant":
+        entry = history[idx]
+        question = _previous_user_question(history, idx)
+        try:
+            with st.spinner("Generating charts..."):
+                specs = generate_chart_specs(
+                    question=question,
+                    dataframes=entry.get("tool_dataframes") or [],
+                    answer=entry.get("content", ""),
+                )
+            # Success: store specs (possibly empty if Flash said no chart helps),
+            # clear any prior error.
+            entry["charts"]      = specs
+            entry["chart_error"] = None
+        except Exception as e:
+            # Real failure: keep `charts` as None so the user can retry, and
+            # surface a short reason inline next to the message.
+            err_msg = str(e) or e.__class__.__name__
+            if len(err_msg) > 200:
+                err_msg = err_msg[:200] + "…"
+            entry["charts"]      = None
+            entry["chart_error"] = err_msg
+    st.session_state.pending_chart_idx = None
     st.rerun()
 
 # INPUT

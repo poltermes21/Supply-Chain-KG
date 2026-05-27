@@ -6,7 +6,7 @@ LangGraph manages internal message history, so only external interaction state i
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Any, Optional
 
 
 class AgentInput(BaseModel):
@@ -20,3 +20,10 @@ class AgentOutput(BaseModel):
     answer: str
     cypher_queries: list[str] = Field(default_factory=list)
     iterations_used: int = 0
+    # Raw tool-call results parsed back into DataFrames (kept for downstream
+    # visualisations). Stored as Any so this model stays Pydantic-friendly
+    # without enabling arbitrary_types_allowed.
+    tool_dataframes: list[Any] = Field(default_factory=list)
+    # Pre-computed flag: True when at least one tool result is tabular enough
+    # (≥2 rows AND ≥2 columns) to be worth offering a chart on.
+    chartable: bool = False
