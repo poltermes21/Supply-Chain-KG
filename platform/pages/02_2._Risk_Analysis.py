@@ -6,6 +6,7 @@ import pandas as pd
 from shared.connection import get_neo4j_driver
 from shared.analysis_store import load_block_data
 from shared.ui_helpers import render_section_header
+from shared.chart_colors import RISK_LEVEL_COLORS as RISK_COLORS
 from analysis.queriesv2 import Block2Queries
 
 st.set_page_config(page_title="Risk Analysis", layout="wide")
@@ -17,13 +18,6 @@ AXIS_COLOR  = "#6B7280"
 TEXT_COLOR  = "#E5E7EB"
 TRANSPARENT = "rgba(0,0,0,0)"
 
-# Risk level palette
-RISK_COLORS = {
-    "low":      "#10B981",   # green
-    "medium":   "#F59E0B",   # amber
-    "high":     "#EF4444",   # red
-    "critical": "#7C3AED",   # purple
-}
 RISK_ORDER = ["low", "medium", "high", "critical"]
 
 def base_layout(**kwargs):

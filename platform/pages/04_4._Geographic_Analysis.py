@@ -5,6 +5,7 @@ import pandas as pd
 from shared.analysis_store import load_block_data
 from shared.ui_helpers import render_section_header
 from shared.pyvis_helpers import apply_pyvis_post_processing, render_pyvis_html
+from shared.chart_colors import COMMUNITY_PALETTE
 
 st.set_page_config(page_title="Geographic Analysis", layout="wide")
 
@@ -14,11 +15,6 @@ GRID_COLOR  = "#2A2D3A"
 AXIS_COLOR  = "#6B7280"
 TEXT_COLOR  = "#E5E7EB"
 TRANSPARENT = "rgba(0,0,0,0)"
-
-COMMUNITY_PALETTE = [
-    "#F59E0B", "#3B82F6", "#10B981", "#EF4444",
-    "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16",
-]
 
 def base_layout(**kwargs):
     defaults = dict(

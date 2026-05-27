@@ -88,14 +88,33 @@ You are given:
 Your job: propose 0 to 3 charts that add genuine analytical value BEYOND the
 text answer. If no chart adds value, return an empty list.
 
-Rules:
+Chart-type rules:
 - Use chart_type "bar" for categorical-vs-numeric comparisons (most common case).
 - Use "line" only when the x-axis is genuinely ordered/temporal.
 - Use "scatter" when both axes are numeric and the user is comparing distributions.
 - Use "pie" ONLY for proportional breakdowns with at most 8 categories.
-- Use exact column names from the dataframes — do not invent or rename.
+
+Column-selection rules:
+- x_col / y_col / color_col MUST be exact column names from the dataframes — do
+  not invent or rename.
 - Pick a dataframe (df_index) whose shape supports the chart you propose.
-- The title must be short and in the same language as the user's question.
-- Maximum 3 charts. Prefer 1 well-chosen chart over many marginal ones.
 - Never return more than one chart for the same (df_index, chart_type, x_col, y_col).
+
+Label rules (CRITICAL — these are what the user sees on the chart):
+- x_label and y_label are REQUIRED for every chart. They are the human-readable
+  titles shown on the axes and inside hover tooltips.
+- Do NOT use snake_case database column names. Turn them into natural language:
+    "delay_rate_pct"        -> "Delay rate (%)"
+    "avg_cost_usd"          -> "Average cost (USD)"
+    "avg_lead_time_days"    -> "Average lead time (days)"
+    "orders"                -> "Orders"
+    "route"                 -> "Route"
+    "from_city" / "to_city" -> "Origin city" / "Destination city"
+- Always include the unit in parentheses when one applies (%, USD, days, kg).
+- If color_col is set, also provide color_label using the same rules.
+- The title, all labels, and the rationale must be in the SAME LANGUAGE as the
+  user's question (English, Spanish, Catalan, etc.).
+
+Output volume:
+- Maximum 3 charts. Prefer 1 well-chosen chart over many marginal ones.
 """

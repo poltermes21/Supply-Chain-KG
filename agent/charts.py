@@ -2,22 +2,16 @@
 Chart Spec Generation Module
 
 Given the user's question, the agent's final answer, and the DataFrames
-produced by the agent's tool calls, asks Gemini Flash to propose up to three
+produced by the agent's tool calls, asks the interface model to propose up to three
 chart specifications that would add genuine analytical value beyond the text
-answer. Returns validated `ChartSpec` objects (specs that reference missing
-columns or wrong indices are dropped before returning).
-
-This step runs ON DEMAND — only when the user clicks the "Visualize" button
-on a chartable answer. The chartable flag is precomputed deterministically in
-`agent/graph.py` from the shape of the tool results, so this expensive step
-never runs unless the user opts in.
+answer. Returns validated ChartSpec objects.
 """
 
 from typing import Literal, Optional
 
 import pandas as pd
 from langchain_core.messages import HumanMessage, SystemMessage
-from prompts import CHART_GENERATION_SYSTEM
+from .prompts import CHART_GENERATION_SYSTEM
 from pydantic import BaseModel, Field
 
 from .llm import get_interface_llm
@@ -32,10 +26,22 @@ class ChartSpec(BaseModel):
         description="Plotly Express chart type that fits the data shape",
     )
     x_col: str = Field(description="Exact column name to use on the x-axis (or labels for pie)")
+    x_label: str = Field(
+        default="",
+        description="Human-readable x-axis title (no snake_case; include units in parentheses)",
+    )
     y_col: str = Field(description="Exact column name to use on the y-axis (or values for pie)")
+    y_label: str = Field(
+        default="",
+        description="Human-readable y-axis title (no snake_case; include units in parentheses)",
+    )
     color_col: Optional[str] = Field(
         default=None,
         description="Optional exact column name to use for color grouping",
+    )
+    color_label: Optional[str] = Field(
+        default=None,
+        description="Human-readable label for the color legend (only when color_col is set)",
     )
     title: str = Field(
         description="Short chart title in the same language as the user's question",

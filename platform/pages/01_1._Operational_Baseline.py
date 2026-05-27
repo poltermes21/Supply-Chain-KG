@@ -6,6 +6,7 @@ import pandas as pd
 import json as _json
 from shared.analysis_store import load_block_data
 from shared.ui_helpers import render_section_header
+from shared.chart_colors import ROUTE_COLORS, REDUNDANCY_PROFILE_COLORS
 
 st.set_page_config(page_title="Operational Baseline", layout="wide")
 
@@ -17,13 +18,6 @@ TEXT_COLOR1  = "#E5E7EB"
 TEXT_COLOR2 = "#1A1D27"
 TRANSPARENT = "rgba(0,0,0,0)"
 
-ROUTE_COLORS = {
-    "Suez": "#1D4ED8",
-    "Pacific": "#10B981", 
-    "Intra-Asia": "#F59E0B",
-    "CoGH": "#EF4444",
-    "Atlantic": "#8B5CF6"
-}
 DEFAULT_ROUTE_COLOR = "#6B7280"
 
 def base_layout(**kwargs):
@@ -838,13 +832,6 @@ with col_heat:
 # Route share distribution scatter
 st.markdown('<div class="section-label">Route concentration vs delay rate — bubble = orders volume</div>', unsafe_allow_html=True)
 
-profile_color_map = {
-    "single_route":             "#EF4444",
-    "highly_concentrated":      "#F59E0B",
-    "moderately_concentrated":  "#3B82F6",
-    "well_diversified":         "#10B981",
-}
-
 fig_scatter = go.Figure()
 for profile, grp in df_od.groupby("redundancy_profile"):
     fig_scatter.add_trace(go.Scatter(
@@ -854,7 +841,7 @@ for profile, grp in df_od.groupby("redundancy_profile"):
         name=profile.replace("_", " ").title(),
         marker=dict(
             size=grp["orders"].apply(lambda v: max(6, min(30, v / df_od["orders"].max() * 40))),
-            color=profile_color_map.get(profile, "#6B7280"),
+            color=REDUNDANCY_PROFILE_COLORS.get(profile, "#6B7280"),
             opacity=0.75,
             line=dict(width=0.5, color="#FFFFFF"),
         ),
@@ -962,10 +949,9 @@ if not lane_data.empty:
     with col_info:
         st.markdown('<div class="section-label">Resilience Profile</div>', unsafe_allow_html=True)
         profile = row['redundancy_profile'].replace('_', ' ').title()
-        
-        color_map = {"Single Route": "#EF4444", "Highly Concentrated": "#F59E0B", 
-                    "Moderately Concentrated": "#3B82F6", "Well Diversified": "#10B981"}
-        p_color = color_map.get(profile, "#6B7280")
+
+        # REDUNDANCY_PROFILE_COLORS contains both snake_case and Title Case keys.
+        p_color = REDUNDANCY_PROFILE_COLORS.get(profile, "#6B7280")
         
         st.markdown(f"""
         <div style="background: #1A1D27; border: 1px solid #2A2D3A; border-left: 4px solid {p_color}; 

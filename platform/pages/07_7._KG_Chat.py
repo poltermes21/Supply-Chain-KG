@@ -10,6 +10,7 @@ import re
 import markdown as md_lib
 import plotly.express as px
 from agent import run as agent_run, get_memory, generate_chart_specs
+from shared.chart_colors import infer_color_map, DEFAULT_PALETTE
 
 st.set_page_config(page_title="KG Chat", layout="wide")
 
@@ -120,6 +121,7 @@ st.markdown(
     "Ask questions in natural language — the agent translates them to Cypher, "
     "queries the Neo4j graph, and returns a grounded answer."
 )
+st.markdown('Use the sidebar to inspect Cypher or trigger chart generation when a visual summary helps')
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
 # SIDEBAR
@@ -140,7 +142,7 @@ with st.sidebar:
     )
 
     if st.button(
-        "🗑️ Clear conversation",
+        "Clear conversation",
         width='stretch',
         disabled=is_generating,
     ):
@@ -181,16 +183,61 @@ def render_user_msg(content: str) -> None:
 
 
 def _render_chart(spec, dataframes) -> None:
-    """Render one ChartSpec via plotly.express."""
+    """Render one ChartSpec via plotly.express.
+
+    Applies the NL labels Flash produced (falling back to the raw column name
+    if absent). Auto-colours bar charts by x_col when no explicit color_col
+    was provided. For known categorical columns (route, risk_level,
+    shock_status, redundancy profile, community) the colour mapping is
+    pulled from the centralised palette so the chat charts match the rest
+    of the app (Suez always blue, CoGH always red, Community 3 always the
+    same hue page 4 uses, etc.). Other categoricals fall back to a generic
+    palette sequence.
+    """
     if spec.df_index < 0 or spec.df_index >= len(dataframes):
         return
     df = dataframes[spec.df_index]
     if df is None or df.empty:
         return
     try:
-        kwargs = {"title": spec.title}
+        # Fall back to raw column names when Flash didn't return NL labels
+        # (e.g., specs cached before this prompt update).
+        x_label = (getattr(spec, "x_label", "") or spec.x_col)
+        y_label = (getattr(spec, "y_label", "") or spec.y_col)
+        labels = {spec.x_col: x_label, spec.y_col: y_label}
+        color_label = getattr(spec, "color_label", None)
+        if spec.color_col and color_label:
+            labels[spec.color_col] = color_label
+
+        kwargs = {
+            "title": spec.title,
+            "labels": labels,
+        }
+
+        # Decide colour mapping: explicit color_col wins; otherwise auto-colour
+        # bar charts by x so each bar reads as its own category.
+        auto_colour_by_x = False
         if spec.color_col:
             kwargs["color"] = spec.color_col
+        elif spec.chart_type == "bar":
+            kwargs["color"] = spec.x_col
+            auto_colour_by_x = True
+
+        # If the column driving colour matches a known categorical (route,
+        # risk_level, shock_status, redundancy profile, community), pin the
+        # mapping so values keep their app-wide hue. Otherwise use the
+        # generic sequence palette.
+        colour_col = kwargs.get("color")
+        if colour_col and colour_col in df.columns:
+            unique_vals = df[colour_col].dropna().unique().tolist()
+            mapping = infer_color_map(colour_col, unique_vals)
+            if mapping:
+                kwargs["color_discrete_map"] = mapping
+            else:
+                kwargs["color_discrete_sequence"] = DEFAULT_PALETTE
+        else:
+            kwargs["color_discrete_sequence"] = DEFAULT_PALETTE
+
         if spec.chart_type == "bar":
             fig = px.bar(df, x=spec.x_col, y=spec.y_col, **kwargs)
         elif spec.chart_type == "line":
@@ -198,9 +245,30 @@ def _render_chart(spec, dataframes) -> None:
         elif spec.chart_type == "scatter":
             fig = px.scatter(df, x=spec.x_col, y=spec.y_col, **kwargs)
         elif spec.chart_type == "pie":
-            fig = px.pie(df, names=spec.x_col, values=spec.y_col, title=spec.title)
+            # Pie chart colours via names column; mirror the same logic.
+            pie_kwargs = {"title": spec.title}
+            unique_vals = df[spec.x_col].dropna().unique().tolist()
+            pie_mapping = infer_color_map(spec.x_col, unique_vals)
+            if pie_mapping:
+                pie_kwargs["color"] = spec.x_col
+                pie_kwargs["color_discrete_map"] = pie_mapping
+            else:
+                pie_kwargs["color_discrete_sequence"] = DEFAULT_PALETTE
+            fig = px.pie(df, names=spec.x_col, values=spec.y_col, **pie_kwargs)
+            # px.pie ignores `labels`; restate units in the hover.
+            fig.update_traces(
+                hovertemplate=(
+                    f"<b>%{{label}}</b><br>{y_label}: %{{value}}<extra></extra>"
+                )
+            )
         else:
             return
+
+        # Hide the legend when bars are auto-coloured by x — it would just
+        # duplicate the x-axis tick labels.
+        if auto_colour_by_x:
+            fig.update_layout(showlegend=False)
+
         fig.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
