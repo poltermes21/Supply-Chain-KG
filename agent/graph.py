@@ -56,31 +56,31 @@ def _chitchat_response(question: str) -> str:
 # Answer from history helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _can_answer_from_history(question: str, history: str) -> bool:
-    """Flash decideix si l'historial conté la resposta. Cost: ~100 tokens."""
-    llm = get_interface_llm(temperature=0)
-    reply = llm.invoke([
-        SystemMessage(content=(
-            "Does the conversation history contain enough data to answer "
-            "the question directly, without querying a database?\n"
-            "Reply ONLY with 'yes' or 'no'."
-        )),
-        HumanMessage(content=f"History:\n{history}\n\nQuestion: {question}"),
-    ])
-    return reply.content.strip().lower().startswith("yes")
-
-def _answer_with_flash(question: str, history: str) -> str:
-    """Flash respon usant l'historial. Cost: ~200-300 tokens, ~1s."""
+def _try_answer_from_history(question: str, history: str) -> str | None:
+    """
+    Single Flash call: decides and answers at the same time.
+    
+    Returns:
+        The answer in NL if history is sufficient, or None if a graph query is needed.
+    """
     llm = get_interface_llm(temperature=0.3)
     reply = llm.invoke([
         SystemMessage(content=(
-            "Answer the question using ONLY the data in the conversation history. "
-            "Respond in the SAME LANGUAGE as the question. "
-            "Do not invent any data not present in the history."
+            "You are answering a question using ONLY the conversation history below. "
+            "Decide and respond as follows:\n\n"
+            "1. If the history contains enough data to answer the question directly, "
+            "respond in the SAME LANGUAGE as the question. "
+            "Do not invent any data not present in the history.\n\n"
+            "2. If the history does NOT contain enough data to answer "
+            "(e.g. the question requires new aggregations, filters, or data not yet retrieved), "
+            "respond with EXACTLY this token and nothing else: NEED_QUERY"
         )),
         HumanMessage(content=f"History:\n{history}\n\nQuestion: {question}"),
     ])
-    return reply.content.strip()
+    text = reply.content.strip()
+    if "NEED_QUERY" in text.upper():
+        return None
+    return text
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Agent ReAct helpers
@@ -172,10 +172,11 @@ def run(question: str, session_id: str = "default") -> AgentOutput:
         history_str = "\n".join(lines)
         
     # 3. Answer from context fast-path
-    if history_str and _can_answer_from_history(question, history_str):
-        answer = _answer_with_flash(question, history_str)
-        memory.add_turn(question, answer)
-        return AgentOutput(answer=answer)
+    if history_str:
+        answer = _try_answer_from_history(question, history_str)
+        if answer is not None:
+            memory.add_turn(question, answer)
+            return AgentOutput(answer=answer)
 
     # Inject history inside HumanMessage
     if history_str:
