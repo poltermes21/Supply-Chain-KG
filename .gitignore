@@ -210,7 +210,7 @@ __marimo__/
 # CSV, json, parquet Files
 *.csv
 *.json
-#*.parquet
+*.parquet
 
 # Streamlit
 secrets.toml

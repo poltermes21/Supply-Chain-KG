@@ -69,7 +69,7 @@ class DataExplorer:
         print("\n" + "="*60)
         print("NUMERICAL COLUMNS STATISTICS")
         print("="*60)
-        print(self.df.describe())
+        print(self.df.describe().T)
     
     def describe_categorical(self):
         """Distribution of categorical columns."""
