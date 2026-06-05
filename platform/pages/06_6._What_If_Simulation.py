@@ -5,6 +5,7 @@ from shared.connection import get_neo4j_driver
 from analysis.queriesv2.block6_what_if import Block6Queries
 from shared.ui_helpers import render_section_header
 from shared.pyvis_helpers import apply_pyvis_post_processing, render_pyvis_html
+from shared.colors import SHOCK_STATUS_COLORS
 
 st.set_page_config(page_title="What-If Scenarios", layout="wide")
 
@@ -15,19 +16,12 @@ AXIS_COLOR  = "#6B7280"
 TEXT_COLOR  = "#E5E7EB"
 TRANSPARENT = "rgba(0,0,0,0)"
 
+# Display labels are page-local (UI strings); colours come from the shared
+# palette so they stay aligned with any other view that uses shock status.
 SHOCK_STATUS = {
-    "fully_blocked": {
-        "label": "Fully blocked",
-        "color": "#EF4444",
-    },
-    "primary_loss": {
-        "label": "Primary route lost",
-        "color": "#F59E0B",
-    },
-    "partial_loss": {
-        "label": "Secondary route lost",
-        "color": "#3B82F6",
-    },
+    "fully_blocked": {"label": "Fully blocked",        "color": SHOCK_STATUS_COLORS["fully_blocked"]},
+    "primary_loss":  {"label": "Primary route lost",   "color": SHOCK_STATUS_COLORS["primary_loss"]},
+    "partial_loss":  {"label": "Secondary route lost", "color": SHOCK_STATUS_COLORS["partial_loss"]},
 }
 
 WEIGHT_LABELS = {

@@ -6,6 +6,7 @@ import pandas as pd
 from shared.connection import get_neo4j_driver
 from shared.analysis_store import load_block_data
 from shared.ui_helpers import render_section_header
+from shared.colors import RISK_LEVEL_COLORS
 from analysis.queriesv2 import Block2Queries
 
 st.set_page_config(page_title="Risk Analysis", layout="wide")
@@ -17,13 +18,6 @@ AXIS_COLOR  = "#6B7280"
 TEXT_COLOR  = "#E5E7EB"
 TRANSPARENT = "rgba(0,0,0,0)"
 
-# Risk level palette
-RISK_COLORS = {
-    "low":      "#10B981",   # green
-    "medium":   "#F59E0B",   # amber
-    "high":     "#EF4444",   # red
-    "critical": "#7C3AED",   # purple
-}
 RISK_ORDER = ["low", "medium", "high", "critical"]
 
 def base_layout(**kwargs):
@@ -253,7 +247,7 @@ for i, level in enumerate(RISK_ORDER):
     if row.empty:
         continue
     row = row.iloc[0]
-    color = RISK_COLORS[level]
+    color = RISK_LEVEL_COLORS[level]
 
     pct_total    = row["pct_total"]
     n_orders     = int(row["total_orders"])
@@ -316,7 +310,7 @@ fig_corr.add_trace(go.Bar(
     x=df_corr["risk_level"].str.capitalize(),
     y=df_corr["avg_combined_risk_score"],
     name="Avg Combined Risk Score",
-    marker_color=[RISK_COLORS.get(r, "#6B7280") for r in df_corr["risk_level"]],
+    marker_color=[RISK_LEVEL_COLORS.get(r, "#6B7280") for r in df_corr["risk_level"]],
     opacity=0.7,
     hovertemplate="<b>%{x}</b><br>Risk Score: %{y:.4f}<extra></extra>",
 ), secondary_y=False)

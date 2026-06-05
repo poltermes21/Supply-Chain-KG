@@ -14,5 +14,13 @@ Usage:
 from .graph import run
 from .state import AgentInput, AgentOutput
 from .memory import get_memory
+from .charts import ChartSpec, generate_chart_specs
 
-__all__ = ["run", "AgentInput", "AgentOutput", "get_memory"]
+__all__ = [
+    "run",
+    "AgentInput",
+    "AgentOutput",
+    "get_memory",
+    "ChartSpec",
+    "generate_chart_specs",
+]
