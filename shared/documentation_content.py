@@ -79,9 +79,9 @@ DOCUMENTATION_PAGES = [
         ],
     },
     {
-        "page_title": "4. Geographic Analysis",
-        "page_file": "04_4._Geographic_Analysis.py",
-        "summary": "Territorial exposure and logistics communities across cities and countries.",
+        "page_title": "4. Logistics Communities & Structural Exposure",
+        "page_file": "04_4._Communities_and_Exposure.py",
+        "summary": "Logistics communities, flow exposure per node and critical inter-community bridges.",
         "sections": [
             {
                 "title": "1 · Flow exposure per node",
@@ -138,15 +138,15 @@ DOCUMENTATION_PAGES = [
         "summary": "Scenario testing for blocked routes, failed cities and route optimisation.",
         "sections": [
             {
-                "title": "Route Shock Simulation",
+                "title": "1 · Route Shock Simulation",
                 "summary": "Simulates route blockages and estimates the affected volume, reroutability and penalty.",
             },
             {
-                "title": "Node Failure Simulation",
+                "title": "2 · Node Failure Simulation",
                 "summary": "Simulates the failure of one or more cities and measures the resulting network impact.",
             },
             {
-                "title": "Emergency Path Optimization",
+                "title": "3 · Emergency Path Optimization",
                 "summary": "Finds the best path between two cities under different optimisation goals.",
             },
         ],
@@ -154,7 +154,7 @@ DOCUMENTATION_PAGES = [
     {
         "page_title": "7. KG Chat",
         "page_file": "07_7._KG_Chat.py",
-        "summary": "Natural-language entry point for querying the knowledge graph through the agent.",
+        "summary": "Ask a natural-language question, inspect the generated Cypher, review the grounded answer and generate charts when a visual summary helps.",
         "sections": [
             {
                 "title": "KG Chat",

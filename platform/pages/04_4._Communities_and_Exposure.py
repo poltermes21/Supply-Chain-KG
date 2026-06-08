@@ -362,10 +362,11 @@ h1, h2, h3 { color: #F9FAFB !important; font-family: 'IBM Plex Sans', sans-serif
 
 # HEADER
 st.markdown('<div class="section-label">Block 4</div>', unsafe_allow_html=True)
-st.markdown("# Geographic Analysis & Community Detection")
+st.markdown("# Logistics Communities & Structural Exposure")
 st.markdown(
-    "Territorial flow exposure and logistics community structure — "
-    "identifies natural clusters, geographic dependencies and inter-cluster fragilities."
+    "Flow exposure per node, Louvain community detection and inter-community "
+    "dependencies — identifies natural logistics clusters and the critical bridges "
+    "that connect them."
 )
 st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
 
