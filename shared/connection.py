@@ -1,4 +1,4 @@
-from analysis.queriesv2.base import get_driver
+from analysis.queries.base import get_driver
 from settings import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 
 def get_neo4j_driver():

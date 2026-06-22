@@ -286,14 +286,14 @@ class DataTransformer:
         
         self.df['route_segment'] = self.df["Origin_Region"] + "_to_" + self.df['Destination_Region']
         
-        # Baseline segmentat (només no disruptives)
+        # Segmented baseline (non-disrupted shipments only)
         baseline = (
             self.df[~self.df['is_disrupted']]
             .groupby(['route_segment', 'Transportation_Mode', 'Product_Category'])['Shipping_Cost_USD']
             .median() 
         )
 
-        # Assignar baseline a cada fila
+        # Assign baseline to each row
         self.df = self.df.join(
             baseline,
             on=['route_segment', 'Transportation_Mode', 'Product_Category'],
@@ -436,7 +436,7 @@ class DataTransformer:
         
         return self.df, self.transformation_stats
     
-    def save_output(self, output_dir: str = "data", filename: str = "data_transformedv2.csv"):
+    def save_output(self, output_dir: str = "data", filename: str = "data_transformed.csv"):
         """Save transformed dataset and stats to disk."""
         os.makedirs(output_dir, exist_ok=True)
         
@@ -496,7 +496,7 @@ class DataTransformer:
 if __name__ == "__main__":
     from settings import DATA_DIR
     
-    df_cleaned = pd.read_csv(os.path.join(DATA_DIR, "data_cleanedv2.csv"))
+    df_cleaned = pd.read_csv(os.path.join(DATA_DIR, "data_cleaned.csv"))
     print(f"Loaded {len(df_cleaned)} rows from data_cleaned.csv")
     
     transformer = DataTransformer(df_cleaned)

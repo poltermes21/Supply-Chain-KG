@@ -620,7 +620,7 @@ class KGExtractor:
 
 if __name__ == "__main__":
     df_transformed = pd.read_csv(
-        os.path.join(DATA_DIR, "data_transformedv2.csv"),
+        os.path.join(DATA_DIR, "data_transformed.csv"),
         parse_dates=['Order_Date']
     )
     print(f"Loaded {len(df_transformed)} rows from data_transformed.csv\n")

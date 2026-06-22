@@ -465,7 +465,7 @@ class DataCleaner:
         os.makedirs(output_dir, exist_ok=True)
         
         # Save validated dataset
-        validated_path = os.path.join(output_dir, "data_cleanedv2.csv")
+        validated_path = os.path.join(output_dir, "data_cleaned.csv")
         self.df.to_csv(validated_path, index=False)
         print(f"\nSaved cleaned dataset to {validated_path}")
         

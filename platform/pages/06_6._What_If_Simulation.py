@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 from shared.connection import get_neo4j_driver
-from analysis.queriesv2.block6_what_if import Block6Queries
+from analysis.queries.block6_what_if import Block6Queries
 from shared.ui_helpers import render_section_header
 from shared.pyvis_helpers import apply_pyvis_post_processing, render_pyvis_html
 from shared.colors import SHOCK_STATUS_COLORS
@@ -34,9 +34,9 @@ ALL_ROUTES = ["Suez", "Pacific", "Intra-Asia", "Atlantic", "CoGH"]
 ALL_CITIES = ["Shanghai", "Rotterdam", "Singapore", "Hamburg", 
               "Los Angeles", "Shenzhen","Busan", "New York", "Mumbai", 
               "Tokyo", "Santos", "Felixstowe", "Antwerp"]
-SOURCE_CITIES = ["Shanghai", "Rotterdam", "Singapore", "Hamburg", "Los Angeles", 
+TARGET_CITIES = ["Shanghai", "Rotterdam", "Singapore", "Hamburg", "Los Angeles", 
                  "New York", "Tokyo", "Santos", "Felixstowe", "Antwerp"]
-TARGET_CITIES = ["Shanghai", "Rotterdam", "Singapore", "Hamburg",
+SOURCE_CITIES = ["Shanghai", "Rotterdam", "Singapore", "Hamburg",
                  "Shenzhen","Busan", "Mumbai", "Tokyo", "Santos"]
 CRITICAL_HUBS = {"Shanghai", "Rotterdam", "Singapore"}
 
@@ -236,6 +236,240 @@ def _build_pyvis_route_shock(df_reroute, df_all_flow, all_cities, status_palette
             )
 
     return apply_pyvis_post_processing(net.generate_html(notebook=False))
+
+
+def _build_pyvis_node_failure(df_local, df_substitute, df_all_flow, all_cities, blocked_cities):
+    """Network view of a node failure: failed nodes in red, surviving neighbours
+    coloured by rerouting feasibility, substitute cities in green."""
+    from pyvis.network import Network
+
+    net = Network(
+        height="500px", width="100%",
+        bgcolor="#0F1117", font_color="#F9FAFB",
+        directed=True, notebook=False, cdn_resources="remote",
+    )
+    net.set_options("""
+    {
+      "nodes": {
+        "borderWidth": 2, "borderWidthSelected": 3,
+        "font": {"size": 14, "face": "IBM Plex Sans", "color": "#F9FAFB"}
+      },
+      "edges": {
+        "smooth": {"enabled": true, "type": "dynamic", "roundness": 0.3},
+        "selectionWidth": 1.5
+      },
+      "physics": {
+        "barnesHut": {
+          "gravitationalConstant": -3000, "centralGravity": 0.3,
+          "springLength": 150, "springConstant": 0.05,
+          "damping": 0.2, "avoidOverlap": 0.45
+        },
+        "minVelocity": 0.6, "solver": "barnesHut",
+        "stabilization": {"enabled": true, "iterations": 200, "fit": true}
+      },
+      "interaction": {
+        "hover": true, "dragNodes": true, "zoomView": true,
+        "tooltipDelay": 80, "navigationButtons": true
+      }
+    }
+    """)
+
+    blocked_set = set(blocked_cities)
+
+    # Build per-city and per-edge aggregates from df_substitute rows.
+    surviving_cities = {}  # city -> {has_alt, orders, lanes}
+    substitute_cities = {}  # city -> {orders}
+    severed_agg = {}   # (u, v) -> total_orders
+    sub_agg = {}       # (u, v) -> total_orders
+
+    if df_substitute is not None and not df_substitute.empty:
+        for _, r in df_substitute.iterrows():
+            fc   = r["failed_city"]
+            sc   = r["surviving_city"]
+            sub  = r.get("substitute_city")
+            feas = r.get("feasibility", "no_observed_alternative")
+            orders = int(r.get("affected_orders", 0))
+
+            if sc not in surviving_cities:
+                surviving_cities[sc] = {"has_alt": False, "orders": 0, "lanes": 0}
+            surviving_cities[sc]["orders"] += orders
+            surviving_cities[sc]["lanes"] += 1
+            if feas == "reroutable_from_history":
+                surviving_cities[sc]["has_alt"] = True
+
+            if r["failed_role"] == "origin":
+                edge = (fc, sc)
+            else:
+                edge = (sc, fc)
+            severed_agg[edge] = severed_agg.get(edge, 0) + orders
+
+            # Substitutes only make sense when the failed node was the origin.
+            if (r["failed_role"] == "origin"
+                    and sub and not (isinstance(sub, float) and pd.isna(sub))):
+                if sub not in substitute_cities:
+                    substitute_cities[sub] = {"orders": 0}
+                substitute_cities[sub]["orders"] += orders
+                sub_edge = (sub, sc)
+                sub_agg[sub_edge] = sub_agg.get(sub_edge, 0) + orders
+
+    local_info = {}
+    if df_local is not None and not df_local.empty:
+        for _, r in df_local.iterrows():
+            local_info[r["blocked_city"]] = {
+                "total":    int(r["total_affected_orders"]),
+                "outbound": int(r["outbound_orders"]),
+                "inbound":  int(r["inbound_orders"]),
+            }
+
+    max_surv_orders = max((v["orders"] for v in surviving_cities.values()), default=1) or 1
+
+    for city in all_cities:
+        if city in blocked_set:
+            info  = local_info.get(city, {})
+            total = info.get("total", 0)
+            color = "#EF4444"
+            size  = 32
+            title = (f"<b>{city}</b><br>"
+                     f"<span style='color:#EF4444'>FAILED NODE</span><br>"
+                     f"Total affected orders: {total:,}<br>"
+                     f"Outbound: {info.get('outbound', 0):,} · "
+                     f"Inbound: {info.get('inbound', 0):,}")
+        elif city in substitute_cities:
+            orders = substitute_cities[city]["orders"]
+            color  = "#10B981"
+            size   = 20
+            title  = (f"<b>{city}</b><br>"
+                      f"<span style='color:#10B981'>Proposed substitute</span><br>"
+                      f"Substitute history orders: {orders:,}")
+        elif city in surviving_cities:
+            meta      = surviving_cities[city]
+            color     = "#F59E0B" if meta["has_alt"] else "#F97316"
+            lbl       = "Has rerouting alternative" if meta["has_alt"] else "No observed alternative"
+            size      = 18 + 18 * (meta["orders"] / max_surv_orders)
+            title     = (f"<b>{city}</b><br>"
+                         f"<span style='color:{color}'>{lbl}</span><br>"
+                         f"Affected orders on incident lanes: {meta['orders']:,}<br>"
+                         f"Incident lanes: {meta['lanes']}")
+        else:
+            color = "#3D4151"
+            size  = 14
+            title = f"<b>{city}</b><br>Unaffected"
+
+        net.add_node(
+            city, label=city,
+            color={"background": color, "border": "#0F1117",
+                   "highlight": {"background": color, "border": "#F9FAFB"}},
+            size=size, title=title,
+        )
+
+    # Backdrop: full topology minus affected edges.
+    active_edges = set(severed_agg.keys()) | set(sub_agg.keys())
+    if df_all_flow is not None and not df_all_flow.empty:
+        for _, r in df_all_flow.iterrows():
+            u, v = r["origin"], r["destination"]
+            if (u, v) in active_edges:
+                continue
+            net.add_edge(
+                u, v,
+                color={"color": "rgba(140,140,160,0.18)", "hover": "rgba(180,180,200,0.45)"},
+                width=1,
+                arrows={"to": {"enabled": True, "scaleFactor": 0.45}},
+                title=f"<b>{u} &rarr; {v}</b><br>Not affected",
+                physics=True,
+            )
+
+    # Severed lanes (red, dashed).
+    max_sev = max(severed_agg.values(), default=1) or 1
+    for (u, v), orders in severed_agg.items():
+        width = 1.5 + 4 * (orders / max_sev)
+        net.add_edge(
+            u, v,
+            color={"color": "#EF4444", "hover": "#EF4444", "highlight": "#EF4444"},
+            width=width, dashes=True,
+            arrows={"to": {"enabled": True, "scaleFactor": 0.8}},
+            title=(f"<b>{u} &rarr; {v}</b><br>"
+                   f"<span style='color:#EF4444'>Severed lane</span><br>"
+                   f"Affected orders: {orders:,}"),
+            physics=True,
+        )
+
+    # Substitute lanes (green).
+    max_sub = max(sub_agg.values(), default=1) or 1
+    for (u, v), orders in sub_agg.items():
+        width = 1.5 + 3 * (orders / max_sub)
+        net.add_edge(
+            u, v,
+            color={"color": "#10B981", "hover": "#10B981", "highlight": "#10B981"},
+            width=width, dashes=False,
+            arrows={"to": {"enabled": True, "scaleFactor": 0.8}},
+            title=(f"<b>{u} &rarr; {v}</b><br>"
+                   f"<span style='color:#10B981'>Substitute lane</span><br>"
+                   f"Substitute history orders: {orders:,}"),
+            physics=True,
+        )
+
+    return apply_pyvis_post_processing(net.generate_html(notebook=False))
+
+
+def _build_pyvis_path(cities, costs, color, weight=None):
+    """Small linear path graph with fixed horizontal positions, no physics."""
+    from pyvis.network import Network
+
+    net = Network(
+        height="220px", width="100%",
+        bgcolor="#0F1117", font_color="#F9FAFB",
+        directed=True, notebook=False, cdn_resources="remote",
+    )
+    net.set_options("""
+    {
+      "nodes": {
+        "borderWidth": 2,
+        "font": {"size": 13, "face": "IBM Plex Sans", "color": "#F9FAFB"}
+      },
+      "edges": {
+        "smooth": {"enabled": false},
+        "font": {"size": 10, "face": "IBM Plex Mono", "color": "#9CA3AF", "align": "middle"},
+        "selectionWidth": 1
+      },
+      "physics": {"enabled": false},
+      "interaction": {
+        "hover": true, "dragNodes": false, "zoomView": false,
+        "tooltipDelay": 80
+      }
+    }
+    """)
+
+    spacing   = 160
+    n         = len(cities)
+    start_x   = -((n - 1) * spacing) / 2
+
+    for i, city in enumerate(cities):
+        net.add_node(
+            city, label=city,
+            x=start_x + i * spacing, y=0,
+            color={"background": color, "border": "#0F1117",
+                   "highlight": {"background": color, "border": "#F9FAFB"}},
+            size=18,
+            title=f"<b>{city}</b>",
+            physics=False,
+        )
+
+    for i in range(n - 1):
+        seg_label = ""
+        if len(costs) > i + 1:
+            delta     = costs[i + 1] - costs[i]
+            prefix    = "×" if weight == "avg_combined_risk_score" else "+"
+            seg_label = f"{prefix}{delta:.2f}"
+        net.add_edge(
+            cities[i], cities[i + 1],
+            color={"color": color, "hover": color, "highlight": color},
+            width=2, label=seg_label,
+            arrows={"to": {"enabled": True, "scaleFactor": 0.7}},
+            physics=False,
+        )
+
+    return apply_pyvis_post_processing(net.generate_html(notebook=False))
+
 
 st.markdown("""
 <style>
@@ -693,9 +927,10 @@ with tab_node:
                 try:
                     df_local       = Block6Queries.node_failure_local_impact(driver, blocked_cities)
                     df_substitute  = Block6Queries.node_failure_lane_substitution(driver, blocked_cities)
+                    df_all_flow    = Block6Queries.all_city_flow(driver)
                     st.session_state["what_if_db_unavailable"] = False
                     st.session_state["what_if_db_unavailable_tab"] = None
-                    st.session_state["node_results"] = (df_local, df_substitute)
+                    st.session_state["node_results"] = (df_local, df_substitute, df_all_flow)
                     st.session_state["node_blocked"] = blocked_cities
                 except Exception as exc:
                     if _is_neo4j_connection_error(exc):
@@ -710,7 +945,7 @@ with tab_node:
 
     # Render stored results (only if they exist)
     if st.session_state.get("node_results") is not None:
-        df_local, df_substitute = st.session_state["node_results"]
+        df_local, df_substitute, df_all_flow = st.session_state["node_results"]
         displayed_cities = st.session_state.get("node_blocked", blocked_cities)
 
         if df_local.empty:
@@ -761,19 +996,60 @@ with tab_node:
                     </div>
                     """, unsafe_allow_html=True)
 
-        # Substitute lanes — by product
+        # Node failure network graph
+        st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
+
+        # Legend
+        node_legend = [
+            ("#EF4444", "Failed node"),
+            ("#F59E0B", "Surviving — has alternative"),
+            ("#F97316", "Surviving — no alternative"),
+            ("#10B981", "Proposed substitute"),
+            ("#3D4151", "Unaffected"),
+        ]
+        leg_cols = st.columns(len(node_legend))
+        for i, (color, label) in enumerate(node_legend):
+            with leg_cols[i]:
+                st.markdown(f"""
+                <div style="display:flex;align-items:flex-start;gap:0.5rem;margin-bottom:0.75rem">
+                    <div style="min-width:10px;height:10px;border-radius:2px;
+                                background:{color};margin-top:3px;flex-shrink:0"></div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;
+                                font-weight:600;color:{color};letter-spacing:0.05em">
+                        {label}
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+        st.markdown('<div class="section-label">Affected network — node failure propagation</div>',
+                    unsafe_allow_html=True)
+        try:
+            node_html = _build_pyvis_node_failure(
+                df_local, df_substitute, df_all_flow, ALL_CITIES, displayed_cities,
+            )
+            render_pyvis_html(node_html, height=520)
+            st.caption(
+                "Red nodes = failed cities · "
+                "Amber = surviving neighbour with rerouting alternative · "
+                "Orange = surviving neighbour with no observed alternative · "
+                "Green = proposed substitute origin · "
+                "Red dashed arrows = severed lanes · "
+                "Green arrows = substitute lanes · "
+                "Faint arrows = unaffected topology backdrop."
+            )
+        except ModuleNotFoundError:
+            st.warning("PyVis is not installed. Run `pip install pyvis` to enable this view.")
+        except Exception as e:
+            st.warning(f"Could not render network: {e}")
+
         if df_substitute is not None and not df_substitute.empty:
             st.markdown('<hr class="divider-line">', unsafe_allow_html=True)
             st.markdown('<div class="section-label">Substitute lanes — by product</div>',
                         unsafe_allow_html=True)
             st.markdown(
-                "For each severed lane and product, candidate cities that already have observed history "
-                "shipping or receiving the same product to/from the surviving endpoint. "
-                "Cost and lead-time deltas are computed against the failed lane's averages.",
-                unsafe_allow_html=True,
+                "Candidate origin cities with observed history shipping the same product "
+                "to the surviving destination. Cost and lead-time deltas vs. the failed lane.",
             )
 
-            # Filters
             sf1, sf2, sf3, sf4 = st.columns(4)
             with sf1:
                 failed_options = ["All"] + sorted(df_substitute["failed_city"].unique().tolist())
@@ -800,7 +1076,6 @@ with tab_node:
             elif sub_feas == "No observed alternative":
                 df_sub_filtered = df_sub_filtered[df_sub_filtered["feasibility"] == "no_observed_alternative"]
 
-            # Alert: how many (lane, product) pairs have no alternative?
             no_alt_pairs = (
                 df_sub_filtered[df_sub_filtered["feasibility"] == "no_observed_alternative"]
                 [["failed_city", "surviving_city", "product"]]
@@ -811,14 +1086,12 @@ with tab_node:
                 <div class="callout-critical">
                     <strong>⚠ {len(no_alt_pairs)} (lane × product) pair{"s" if len(no_alt_pairs) > 1 else ""}
                     with no observed alternative</strong><br>
-                    No order history exists for any city shipping the same product to/from the surviving endpoint.
-                    The real cost of substitution is unknown until a new lane is activated.
+                    No order history exists for any substitute on these lanes.
                 </div>""", unsafe_allow_html=True)
 
             if df_sub_filtered.empty:
                 st.info("No rows match the selected filters.")
             else:
-                # Build a friendly lane label using failed_role to keep direction correct.
                 def _lane_label(r):
                     if r["failed_role"] == "origin":
                         return f"{r['failed_city']} → {r['surviving_city']}"
@@ -827,35 +1100,29 @@ with tab_node:
                 def _sub_lane_label(r):
                     if r["substitute_city"] is None or (isinstance(r["substitute_city"], float) and pd.isna(r["substitute_city"])):
                         return "—"
-                    if r["failed_role"] == "origin":
-                        return f"{r['substitute_city']} → {r['surviving_city']}"
-                    return f"{r['surviving_city']} → {r['substitute_city']}"
+                    return f"{r['substitute_city']} → {r['surviving_city']}"
 
                 df_disp = df_sub_filtered.copy()
-                df_disp["Severed lane"] = df_disp.apply(_lane_label, axis=1)
+                df_disp["Severed lane"]    = df_disp.apply(_lane_label, axis=1)
                 df_disp["Substitute lane"] = df_disp.apply(_sub_lane_label, axis=1)
-                df_disp["Feasibility"] = df_disp["feasibility"].replace({
+                df_disp["Feasibility"]     = df_disp["feasibility"].replace({
                     "reroutable_from_history": "Reroutable",
                     "no_observed_alternative": "No observed alternative",
                 })
-
                 df_disp = df_disp[[
                     "Severed lane", "product", "affected_orders",
                     "Substitute lane", "sub_history_orders",
                     "cost_delta_usd", "lead_delta_days", "Feasibility",
                 ]].rename(columns={
-                    "product":             "Product",
-                    "affected_orders":     "Affected orders",
-                    "sub_history_orders":  "Substitute history",
-                    "cost_delta_usd":      "Cost Δ (USD)",
-                    "lead_delta_days":     "Lead Time Δ (d)",
-                })
-
-                df_disp = df_disp.sort_values(
+                    "product":            "Product",
+                    "affected_orders":    "Affected orders",
+                    "sub_history_orders": "Substitute history",
+                    "cost_delta_usd":     "Cost Δ (USD)",
+                    "lead_delta_days":    "Lead Time Δ (d)",
+                }).sort_values(
                     by=["Affected orders", "Severed lane", "Product"],
                     ascending=[False, True, True],
                 )
-
                 st.dataframe(
                     df_disp, hide_index=True, width='stretch',
                     column_config={
@@ -866,8 +1133,7 @@ with tab_node:
                     },
                 )
                 st.caption(
-                    "Cost Δ and Lead Time Δ are computed from observed orders on the substitute lane. "
-                    "Positive values = substitute is more expensive / slower than the failed lane."
+                    "Positive Δ = substitute is more expensive / slower than the failed lane."
                 )
 
     elif run_node and not blocked_cities:
@@ -964,7 +1230,7 @@ with tab_path:
                         unsafe_allow_html=True,
                     )
                 else:
-                    row = df_p.iloc[0]
+                    row   = df_p.iloc[0]
                     cities = row["path_cities"]
                     total  = row["total_path_cost"]
                     costs  = row.get("accumulated_costs", [])
@@ -990,7 +1256,6 @@ with tab_path:
                                         f'+{delta:.2f}</span>'
                                     )
                             path_html += f'<span class="path-arrow">→{seg_cost}</span>'
-
                     st.markdown(f'<div class="path-row">{path_html}</div>', unsafe_allow_html=True)
 
                     # Total cost badge

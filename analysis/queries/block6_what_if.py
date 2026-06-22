@@ -13,7 +13,7 @@ Queries:
 
 import pandas as pd
 from typing import List, Optional
-from analysis.queriesv2.base import run_query
+from analysis.queries.base import run_query
 
 class Block6Queries:
     """

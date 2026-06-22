@@ -12,7 +12,7 @@ Queries:
 """
 
 import pandas as pd
-from analysis.queriesv2.base import run_query
+from analysis.queries.base import run_query
 
 class Block2Queries:
     """

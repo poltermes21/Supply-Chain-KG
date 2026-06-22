@@ -7,7 +7,7 @@ from shared.connection import get_neo4j_driver
 from shared.analysis_store import load_block_data
 from shared.ui_helpers import render_section_header
 from shared.colors import RISK_LEVEL_COLORS
-from analysis.queriesv2 import Block2Queries
+from analysis.queries import Block2Queries
 
 st.set_page_config(page_title="Risk Analysis", layout="wide")
 

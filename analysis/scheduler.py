@@ -16,7 +16,7 @@ from typing import Callable
 
 import pandas as pd
 
-from analysis.queriesv2 import (
+from analysis.queries import (
 	Block1Queries,
 	Block2Queries,
 	Block3Queries,
