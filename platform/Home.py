@@ -46,4 +46,4 @@ if not kpi_data.empty:
 else:
     st.error("No data found. Please check your Neo4j database content.")
 
-st.info("👈 Use the sidebar to explore specific analysis blocks.")
+st.info("⬅ Use the sidebar to explore specific analysis blocks.")

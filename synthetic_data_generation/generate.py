@@ -1,7 +1,12 @@
+import sys
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from uuid import uuid4
-from config import *
+from .config import *
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from settings import PROJECT_ROOT, DATA_DIR, DATA_FILENAME
 
 rng = np.random.default_rng(SEED)
 
@@ -285,7 +290,10 @@ def generate_dataset(n: int = N_ORDERS) -> pd.DataFrame:
 
 if __name__ == "__main__":
     df = generate_dataset()
-    out = "global_supply_chain_v2.csv"
+
+    out = PROJECT_ROOT / DATA_DIR / DATA_FILENAME
+    out.parent.mkdir(parents=True, exist_ok=True)
+
     df.to_csv(out, index=False)
     print(f"Dataset saved: {out}  ({len(df):,} rows)")
 
