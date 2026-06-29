@@ -80,16 +80,6 @@ def assign_mode(product: str, route: str) -> str:
 
 # STEP 5: ASSIGN WEIGHT
 
-WEIGHT_MEANS = {
-    "Pharmaceuticals":      1500,
-    "Semiconductors":       1200,
-    "Consumer Electronics": 3000,
-    "Auto Parts":           6000,
-    "Textiles":             5500,
-    "Raw Materials":        8000,
-    "Perishable Foods":     4000,
-}
-
 def assign_weight(product: str) -> int:
     """
     Sample shipment weight (kg) from a normal distribution centred on the

@@ -183,6 +183,16 @@ PRODUCT_COST_FACTOR = {
     "Raw Materials":        0.75,
 }
 
+WEIGHT_MEANS = {
+    "Pharmaceuticals":      1500,
+    "Semiconductors":       1200,
+    "Consumer Electronics": 3000,
+    "Auto Parts":           6000,
+    "Textiles":             5500,
+    "Raw Materials":        8000,
+    "Perishable Foods":     4000,
+}
+
 MITIGATION_COST_FACTOR = {
     "Standard Shipping":     1.00,
     "Re-routing":            1.30,
